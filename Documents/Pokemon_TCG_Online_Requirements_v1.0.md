@@ -9,6 +9,8 @@ postgres
 zeabur [https://zeabur.com/docs/zh-TW/](https://zeabur.com/docs/zh-TW/)   
 docker file
 
+support mobile and desktop
+
 # set up
 
 - 一個皮卡丘硬幣在雙方中間。  
