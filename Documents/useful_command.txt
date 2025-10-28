@@ -1,0 +1,8 @@
+# 搜尋「皮卡丘」的所有卡片
+grep -r "皮卡丘" . --include="*.json"
+
+# 或者搜尋英文名稱
+grep -r "Pikachu" . --include="*.json"
+
+# 只顯示檔案名稱（不顯示內容）
+grep -rl "皮卡丘" . --include="*.json"
