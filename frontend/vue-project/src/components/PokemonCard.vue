@@ -1,117 +1,66 @@
 <script setup>
 defineProps({
-  name: String,
-  hp: Number,
-  image: String,
-  type: String,
-  attacks: Array
+  image: String
 })
 </script>
 
 <template>
-  <div class="pokemon-card">
-    <div class="card-header">
-      <h3>{{ name }}</h3>
-      <span class="hp">HP {{ hp }}</span>
-    </div>
-    <div class="card-image">
-      <img :src="image" :alt="name" />
-    </div>
-    <div class="card-type">
-      <span class="type-badge">{{ type }}</span>
-    </div>
-    <div class="card-attacks">
-      <div v-for="(attack, index) in attacks" :key="index" class="attack">
-        <span class="attack-name">{{ attack.name }}</span>
-        <span class="attack-damage">{{ attack.damage }}</span>
-      </div>
+  <div class="card-holder">
+    <div class="card-frame">
+      <img :src="image" alt="Pokemon Card" class="card-image" />
     </div>
   </div>
 </template>
 
 <style scoped>
-.pokemon-card {
-  width: 250px;
-  border: 2px solid #ddd;
-  border-radius: 12px;
-  padding: 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s;
+.card-holder {
+  width: 100%;
+  max-width: 250px;
   cursor: pointer;
+  transition: transform 0.2s ease;
 }
 
-.pokemon-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+.card-holder:hover {
+  transform: translateY(-4px);
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+.card-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  background: white;
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 2px rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
 }
 
-.card-header h3 {
-  margin: 0;
-  color: white;
-  font-size: 20px;
-}
-
-.hp {
-  color: #ffd700;
-  font-weight: bold;
-  font-size: 16px;
+.card-holder:hover .card-frame {
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .card-image {
-  background: white;
-  border-radius: 8px;
-  padding: 12px;
-  text-align: center;
-  margin-bottom: 12px;
-}
-
-.card-image img {
   width: 100%;
-  height: auto;
-  max-height: 180px;
-  object-fit: contain;
-}
-
-.card-type {
-  margin-bottom: 12px;
-}
-
-.type-badge {
-  background: rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 14px;
-  font-weight: bold;
-}
-
-.card-attacks {
-  background: rgba(255, 255, 255, 0.2);
+  height: 100%;
+  object-fit: cover;
   border-radius: 8px;
-  padding: 8px;
+  display: block;
 }
 
-.attack {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px;
-  color: white;
-}
-
-.attack-name {
-  font-weight: 500;
-}
-
-.attack-damage {
-  font-weight: bold;
-  color: #ffd700;
+/* 手機版 */
+@media (max-width: 640px) {
+  .card-holder {
+    max-width: 100%;
+  }
+  
+  .card-frame {
+    padding: 6px;
+  }
 }
 </style>
