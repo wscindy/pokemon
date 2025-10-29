@@ -6,7 +6,8 @@ import PokemonCard from '../components/PokemonCard.vue'
 const pokemonCards = ref([])
 const loading = ref(true)
 const error = ref(null)
-const selectedCard = ref(null)
+const hoveredCard = ref(null)
+const mousePosition = ref({ x: 0, y: 0 })
 
 const loadCards = async () => {
   try {
@@ -44,16 +45,26 @@ const loadCards = async () => {
   }
 }
 
-const showCardDetail = (card) => {
-  selectedCard.value = card
+const showCardPreview = (card) => {
+  hoveredCard.value = card
 }
 
-const closeCardDetail = () => {
-  selectedCard.value = null
+const hideCardPreview = () => {
+  hoveredCard.value = null
+}
+
+// 追蹤鼠標位置
+const updateMousePosition = (event) => {
+  mousePosition.value = {
+    x: event.clientX,
+    y: event.clientY
+  }
 }
 
 onMounted(() => {
   loadCards()
+  // 監聽全域鼠標移動
+  window.addEventListener('mousemove', updateMousePosition)
 })
 </script>
 
@@ -79,19 +90,26 @@ onMounted(() => {
           v-for="(card, index) in pokemonCards"
           :key="card.number || index"
           :image="card.img"
-          @click="showCardDetail(card)"
+          @mouseenter="showCardPreview(card)"
+          @mouseleave="hideCardPreview"
         />
       </div>
     </div>
     
-    <!-- Hover 大圖 Modal -->
+    <!-- Hover 大圖預覽（跟隨鼠標） -->
     <Teleport to="body">
-      <div v-if="selectedCard" class="card-modal" @click="closeCardDetail">
-        <div class="modal-content" @click.stop>
-          <button class="close-btn" @click="closeCardDetail">×</button>
-          <img :src="selectedCard.img" :alt="selectedCard.name" class="full-card-image" />
+      <Transition name="fade">
+        <div 
+          v-if="hoveredCard" 
+          class="card-preview-floating"
+          :style="{
+            left: mousePosition.x + 20 + 'px',
+            top: mousePosition.y + 20 + 'px'
+          }"
+        >
+          <img :src="hoveredCard.img" :alt="hoveredCard.name" class="preview-image" />
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -189,76 +207,36 @@ onMounted(() => {
   box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
 }
 
-/* Modal 大圖 */
-.card-modal {
+/* Hover 大圖預覽（跟隨鼠標） */
+.card-preview-floating {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 9999;
-  cursor: pointer;
-  animation: fadeIn 0.2s ease;
+  pointer-events: none;
+  /* 讓大圖不會被鼠標擋住 */
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.modal-content {
-  position: relative;
-  max-width: 90%;
-  max-height: 90vh;
-  cursor: default;
-  animation: zoomIn 0.3s ease;
-}
-
-@keyframes zoomIn {
-  from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.full-card-image {
-  max-width: 100%;
-  max-height: 90vh;
+.preview-image {
+  width: 350px;
   height: auto;
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 0 0 3px rgba(255, 255, 255, 0.2);
+  /* 白色邊框讓卡片更清楚 */
 }
 
-.close-btn {
-  position: absolute;
-  top: -15px;
-  right: -15px;
-  width: 40px;
-  height: 40px;
-  background: white;
-  border: none;
-  border-radius: 50%;
-  font-size: 28px;
-  line-height: 1;
-  cursor: pointer;
-  color: #333;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s;
-  z-index: 10000;
+/* 淡入淡出動畫 */
+.fade-enter-active {
+  transition: opacity 0.15s ease;
 }
 
-.close-btn:hover {
-  background: #ef5350;
-  color: white;
-  transform: rotate(90deg);
+.fade-leave-active {
+  transition: opacity 0.1s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 /* 平板版 */
@@ -267,6 +245,10 @@ onMounted(() => {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 24px;
     padding: 16px;
+  }
+  
+  .preview-image {
+    width: 280px;
   }
 }
 
@@ -282,14 +264,17 @@ onMounted(() => {
     padding: 12px;
   }
   
-  .full-card-image {
-    max-width: 95%;
-    max-height: 80vh;
+  /* 手機版：大圖顯示在中間而不是跟隨鼠標 */
+  .card-preview-floating {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%);
   }
   
-  .close-btn {
-    top: 10px;
-    right: 10px;
+  .preview-image {
+    width: 90vw;
+    max-width: 350px;
   }
 }
 
