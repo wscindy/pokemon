@@ -1,1 +1,37 @@
+# Dependencies
+node_modules/
+.bundle/
+vendor/
+Gemfile.lock
+
+# Data
+backend/public/data_tc/
+frontend/vue-project/public/data_tc/
 frontend/.DS_Store
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+log/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+EOF
+
