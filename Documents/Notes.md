@@ -117,3 +117,58 @@ psql -U liweixuan -d pokemon_tcg_development -c "SELECT COUNT(*) FROM cards;"
 lsof -i :5432
 
 # 如果有輸出，代表 PostgreSQL 在監聽埠口 5432
+
+
+
+
+
+
+# 啟動前端專案
+cd frontend/vue-project 
+npm run dev
+
+# 建表
+rails generate model User email:string name:string uid:string provider:string avatar_url:string online_status:string
+
+# 備份原檔案
+cp config/database.yml config/database.yml.backup
+
+
+# 用 pg_ctl 停止
+sudo -u postgres /Library/PostgreSQL/17/bin/pg_ctl -D /Library/PostgreSQL/17/data stop
+
+# 啟動官方 PostgreSQL
+sudo -u postgres /Library/PostgreSQL/17/bin/pg_ctl -D /Library/PostgreSQL/17/data start
+
+
+# Rails Console 測試
+# ═══════════════════════════════════════════════════════════
+
+cd pokemon/backend
+
+# 測試 Rails 能否連接資料庫
+rails dbconsole
+# 應該直接進入 psql
+
+# 退出
+\q
+
+# 測試 Rails Console
+rails console
+
+# 在 console 中：
+Card.count                  # 應該顯示 10760
+Card.first.name            # 顯示第一張卡的名字
+
+
+創造 controller
+# rails generate controller Api::Decks
+
+---
+
+# 1. 檢查 routes
+rails routes | grep cards
+
+# 2. 如果沒有 search 路由，修改 config/routes.rb
+# 3. 重新啟動伺服器
+# 4. 測試 API
