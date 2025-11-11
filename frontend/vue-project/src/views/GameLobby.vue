@@ -9,6 +9,8 @@ const userProfile = ref({
   avatarId: null
 })
 
+
+
 // 預設頭像列表（與 ProfileSetup 相同）
 const avatars = [
   { id: 1, emoji: '⚡' },
@@ -53,7 +55,7 @@ const handleSpectate = () => {
 }
 
 const handleDeckManagement = () => {
-  alert('牌組管理功能開發中...')
+  router.push({ name: 'DeckBuilder' })
 }
 </script>
 
