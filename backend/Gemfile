@@ -46,3 +46,6 @@ group :development, :test do
 end
 
 gem "pg", "~> 1.6"
+
+# rack-cors gem
+gem 'rack-cors'
