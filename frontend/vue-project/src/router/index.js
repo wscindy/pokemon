@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LandingPage from '../views/LandingPage.vue'
 import ProfileSetup from '../views/ProfileSetup.vue'
 import GameLobby from '../views/GameLobby.vue'
+import DeckBuilder from '@/views/DeckBuilder.vue'
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: '/lobby',
     name: 'GameLobby',
     component: GameLobby
+  },
+  {
+    path: '/deck-builder',
+    name: 'DeckBuilder',
+    component: DeckBuilder
   }
 ]
 
