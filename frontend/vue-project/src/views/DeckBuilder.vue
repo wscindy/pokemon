@@ -1,18 +1,24 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { cardAPI, deckAPI } from '@/services/api'
 
 const router = useRouter()
+
+// 牌組狀態
+const existingDeck = ref(null) // 現有牌組
+const isLoadingDeck = ref(true)
+const isCreatingMode = ref(false) // 是否在新增模式
 
 // 搜尋相關
 const searchKeyword = ref('')
 const searchResults = ref([])
 const isSearching = ref(false)
 
-// 牌組相關
-const deckCards = ref([])
+// 新牌組相關
+const newDeckCards = ref([])
 const isSaving = ref(false)
+const isDeleting = ref(false)
 const saveMessage = ref('')
 
 // 預覽功能
@@ -22,7 +28,12 @@ const showPreview = ref(false)
 
 // 計算總卡片數
 const totalCards = computed(() => {
-  return deckCards.value.reduce((sum, card) => sum + card.quantity, 0)
+  if (isCreatingMode.value) {
+    return newDeckCards.value.reduce((sum, card) => sum + card.quantity, 0)
+  } else if (existingDeck.value) {
+    return existingDeck.value.total_cards
+  }
+  return 0
 })
 
 // 是否可以送出（必須是 60 張）
@@ -30,20 +41,76 @@ const canSubmit = computed(() => {
   return totalCards.value === 60
 })
 
-// 顯示預覽大圖
+// 載入現有牌組
+const loadExistingDeck = async () => {
+  isLoadingDeck.value = true
+  
+  try {
+    const response = await deckAPI.getDeck()
+    
+    if (response.data.success) {
+      const deckData = response.data.data
+      
+      if (deckData.total_cards > 0) {
+        // 有現有牌組
+        existingDeck.value = deckData
+        isCreatingMode.value = false
+      } else {
+        // 沒有牌組，進入新增模式
+        existingDeck.value = null
+        isCreatingMode.value = true
+      }
+    }
+  } catch (error) {
+    console.error('載入牌組錯誤：', error)
+    // 如果載入失敗，預設進入新增模式
+    existingDeck.value = null
+    isCreatingMode.value = true
+  } finally {
+    isLoadingDeck.value = false
+  }
+}
+
+// 刪除牌組
+const deleteDeck = async () => {
+  if (!confirm('確定要刪除牌組？刪除後無法復原。')) {
+    return
+  }
+  
+  isDeleting.value = true
+  
+  try {
+    const response = await deckAPI.deleteDeck()
+    
+    if (response.data.success) {
+      alert('牌組已刪除')
+      existingDeck.value = null
+      isCreatingMode.value = true
+      newDeckCards.value = []
+    } else {
+      alert('刪除失敗：' + response.data.error)
+    }
+  } catch (error) {
+    console.error('刪除錯誤：', error)
+    alert('刪除時發生錯誤：' + (error.response?.data?.error || error.message))
+  } finally {
+    isDeleting.value = false
+  }
+}
+
+
+// 預覽功能
 const handleMouseEnter = (card, event) => {
   previewCard.value = card
   showPreview.value = true
   updatePreviewPosition(event)
 }
 
-// 隱藏預覽大圖
 const handleMouseLeave = () => {
   showPreview.value = false
   previewCard.value = null
 }
 
-// 更新預覽位置
 const updatePreviewPosition = (event) => {
   const offset = 20
   previewPosition.value = {
@@ -52,7 +119,6 @@ const updatePreviewPosition = (event) => {
   }
 }
 
-// 滑鼠移動時更新位置
 const handleMouseMove = (event) => {
   if (showPreview.value) {
     updatePreviewPosition(event)
@@ -97,14 +163,14 @@ const addCardToDeck = (card) => {
     return
   }
   
-  const existingCard = deckCards.value.find(
+  const existingCard = newDeckCards.value.find(
     c => c.card_unique_id === card.card_unique_id
   )
   
   if (existingCard) {
     existingCard.quantity = quantityNum
   } else {
-    deckCards.value.push({
+    newDeckCards.value.push({
       card_unique_id: card.card_unique_id,
       name: card.name,
       img_url: card.img_url,
@@ -123,14 +189,14 @@ const addCardToDeck = (card) => {
 
 // 從牌組移除卡片
 const removeCardFromDeck = (cardUniqueId) => {
-  deckCards.value = deckCards.value.filter(
+  newDeckCards.value = newDeckCards.value.filter(
     card => card.card_unique_id !== cardUniqueId
   )
 }
 
 // 更新卡片數量
 const updateCardQuantity = (cardUniqueId, newQuantity) => {
-  const card = deckCards.value.find(c => c.card_unique_id === cardUniqueId)
+  const card = newDeckCards.value.find(c => c.card_unique_id === cardUniqueId)
   if (card) {
     card.quantity = parseInt(newQuantity)
   }
@@ -146,7 +212,7 @@ const saveDeck = async () => {
   isSaving.value = true
   
   try {
-    const cardsData = deckCards.value.map(card => ({
+    const cardsData = newDeckCards.value.map(card => ({
       card_unique_id: card.card_unique_id,
       quantity: card.quantity
     }))
@@ -155,7 +221,8 @@ const saveDeck = async () => {
     
     if (response.data.success) {
       alert('牌組儲存成功！')
-      router.push({ name: 'GameLobby' })
+      // 重新載入牌組
+      await loadExistingDeck()
     } else {
       alert('儲存失敗：' + response.data.error)
     }
@@ -169,13 +236,18 @@ const saveDeck = async () => {
 
 // 返回大廳
 const handleBack = () => {
-  if (deckCards.value.length > 0) {
+  if (isCreatingMode.value && newDeckCards.value.length > 0) {
     if (!confirm('確定要離開？未儲存的變更將會遺失。')) {
       return
     }
   }
   router.push({ name: 'GameLobby' })
 }
+
+// 頁面載入時檢查現有牌組
+onMounted(() => {
+  loadExistingDeck()
+})
 </script>
 
 <template>
@@ -185,15 +257,58 @@ const handleBack = () => {
       <button class="back-btn" @click="handleBack">
         ← 返回大廳
       </button>
-      <h1 class="header-title">牌組編輯器</h1>
+      <h1 class="header-title">牌組管理</h1>
       <div class="deck-info">
-        <span class="card-count" :class="{ 'complete': canSubmit }">
+        <span v-if="!isLoadingDeck" class="card-count" :class="{ 'complete': canSubmit }">
           {{ totalCards }} / 60 張
         </span>
       </div>
     </header>
 
-    <div class="builder-content">
+    <!-- 載入中 -->
+    <div v-if="isLoadingDeck" class="loading-container">
+      <div class="loading-spinner">載入中...</div>
+    </div>
+
+    <!-- 顯示現有牌組（檢視模式） -->
+    <div v-else-if="!isCreatingMode && existingDeck" class="view-mode">
+      <div class="view-container">
+        <div class="view-header">
+          <h2 class="view-title">目前牌組</h2>
+          <button 
+            class="delete-deck-btn" 
+            @click="deleteDeck"
+            :disabled="isDeleting"
+          >
+            {{ isDeleting ? '刪除中...' : '🗑️ 刪除牌組' }}
+          </button>
+        </div>
+
+        <div class="existing-deck-grid">
+          <div 
+            v-for="card in existingDeck.cards" 
+            :key="card.card_unique_id" 
+            class="existing-card"
+            @mouseenter="(e) => handleMouseEnter(card, e)"
+            @mouseleave="handleMouseLeave"
+            @mousemove="handleMouseMove"
+          >
+            <img 
+              :src="card.img_url" 
+              :alt="card.name"
+              class="existing-card-image"
+            />
+            <div class="existing-card-info">
+              <h4 class="existing-card-name">{{ card.name }}</h4>
+              <p class="existing-card-quantity">數量：{{ card.quantity }} 張</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增牌組模式 -->
+    <div v-else class="builder-content">
       <!-- 左側：搜尋區域 -->
       <div class="search-section">
         <div class="search-box">
@@ -256,13 +371,13 @@ const handleBack = () => {
           {{ saveMessage }}
         </div>
 
-        <div v-if="deckCards.length === 0" class="empty-deck">
+        <div v-if="newDeckCards.length === 0" class="empty-deck">
           目前牌組是空的，開始加入卡片吧！
         </div>
 
         <div v-else class="deck-list">
           <div 
-            v-for="card in deckCards" 
+            v-for="card in newDeckCards" 
             :key="card.card_unique_id" 
             class="deck-card"
             @mouseenter="(e) => handleMouseEnter(card, e)"
@@ -389,6 +504,111 @@ const handleBack = () => {
 .card-count.complete {
   color: #38a169;
   background: #c6f6d5;
+}
+
+/* 載入中 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+}
+
+.loading-spinner {
+  font-size: 24px;
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* 檢視模式 */
+.view-mode {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.view-container {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.view-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.delete-deck-btn {
+  padding: 12px 24px;
+  background: #fc8181;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.delete-deck-btn:hover:not(:disabled) {
+  background: #f56565;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(252, 129, 129, 0.4);
+}
+
+.delete-deck-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.existing-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.existing-card {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.existing-card:hover {
+  border-color: #667eea;
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.2);
+}
+
+.existing-card-image {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.existing-card-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 6px;
+}
+
+.existing-card-quantity {
+  font-size: 14px;
+  color: #718096;
 }
 
 /* 主要內容 */
@@ -695,6 +915,10 @@ const handleBack = () => {
     grid-template-columns: 1fr;
   }
   
+  .existing-deck-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  
   .preview-image {
     width: 200px;
   }
@@ -708,6 +932,12 @@ const handleBack = () => {
   .card-count {
     font-size: 14px;
     padding: 6px 12px;
+  }
+  
+  .view-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
   }
   
   .preview-image {

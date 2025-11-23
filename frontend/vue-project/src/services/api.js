@@ -40,6 +40,11 @@ export const deckAPI = {
   // 驗證牌組
   validateDeck(cards) {
     return api.post('/deck/validate', { cards })
+  },
+  
+  // 刪除牌組（新增）
+  deleteDeck() {
+    return api.delete('/deck')
   }
 }
 
