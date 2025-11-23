@@ -3,7 +3,7 @@ module Api
     class DecksController < ApplicationController
       before_action :set_current_user
       
-      # GET /api/v1/deck
+      # GET /api/v1/deck - 取得使用者目前的牌組
       def show
         deck_cards = @current_user.user_cards.in_deck.includes(:card)
         
@@ -31,7 +31,7 @@ module Api
         }
       end
       
-      # POST /api/v1/deck
+      # POST /api/v1/deck - 儲存牌組（覆蓋舊牌組）
       def create
         cards_data = params[:cards]
         
@@ -87,7 +87,25 @@ module Api
         end
       end
       
-      # POST /api/v1/deck/validate
+      # DELETE /api/v1/deck - 刪除牌組
+      def destroy
+        begin
+          # 清空所有在牌組中的卡片
+          @current_user.user_cards.in_deck.update_all(is_in_deck: false, quantity: 0)
+          
+          render json: {
+            success: true,
+            message: '牌組已刪除'
+          }
+        rescue => e
+          render json: { 
+            success: false,
+            error: "刪除失敗: #{e.message}" 
+          }, status: :internal_server_error
+        end
+      end
+      
+      # POST /api/v1/deck/validate - 驗證牌組
       def validate
         cards_data = params[:cards]
         result = DeckValidator.validate(cards_data)

@@ -10,6 +10,11 @@ Rails.application.routes.draw do
       resource :deck, only: [:show, :create] do
         post :validate, on: :collection
       end
+
+      # delete cards
+      resource :deck, only: [:show, :create, :destroy] do
+        post :validate, on: :collection
+      end
     end
   end
 end
