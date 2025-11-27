@@ -15,6 +15,10 @@ Rails.application.routes.draw do
       resource :deck, only: [:show, :create, :destroy] do
         post :validate, on: :collection
       end
+      post 'games/initialize', to: 'games#initialize_game'
+        post 'games/:id/setup', to: 'games#setup_game'
+        get 'games/:id/state', to: 'games#game_state'
+
     end
   end
 end

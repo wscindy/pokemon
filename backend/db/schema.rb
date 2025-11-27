@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_11_11_095804) do
+ActiveRecord::Schema[8.0].define(version: 2025_11_23_114026) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -79,6 +79,94 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_11_095804) do
     t.unique_constraint ["card_unique_id"], name: "cards_card_unique_id_key"
   end
 
+  create_table "game_actions", force: :cascade do |t|
+    t.bigint "game_state_id", null: false
+    t.bigint "user_id", null: false
+    t.integer "round_number", null: false
+    t.string "action_type", null: false
+    t.bigint "source_card_id"
+    t.bigint "target_card_id"
+    t.text "action_description", null: false
+    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.index ["game_state_id", "round_number"], name: "index_game_actions_on_state_and_round"
+    t.index ["game_state_id"], name: "index_game_actions_on_game_state_id"
+    t.index ["user_id"], name: "index_game_actions_on_user_id"
+  end
+
+  create_table "game_cards", force: :cascade do |t|
+    t.bigint "game_state_id", null: false
+    t.bigint "user_id", null: false
+    t.string "card_unique_id", null: false
+    t.string "zone", null: false
+    t.integer "zone_position"
+    t.bigint "attached_to_game_card_id"
+    t.integer "damage_taken", default: 0, null: false
+    t.string "special_condition"
+    t.boolean "is_evolved_this_turn", default: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.index ["attached_to_game_card_id"], name: "index_game_cards_on_attached_to_game_card_id"
+    t.index ["card_unique_id"], name: "index_game_cards_on_card_unique_id"
+    t.index ["game_state_id", "user_id", "zone"], name: "index_game_cards_on_state_user_zone"
+    t.index ["game_state_id"], name: "index_game_cards_on_game_state_id"
+    t.index ["user_id"], name: "index_game_cards_on_user_id"
+  end
+
+  create_table "game_states", force: :cascade do |t|
+    t.bigint "room_id", null: false
+    t.bigint "player1_id", null: false
+    t.bigint "player2_id", null: false
+    t.bigint "current_turn_user_id", null: false
+    t.integer "round_number", default: 1, null: false
+    t.integer "player1_prizes_remaining", default: 6, null: false
+    t.integer "player2_prizes_remaining", default: 6, null: false
+    t.string "status", default: "setup", null: false
+    t.bigint "winner_id"
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.index ["current_turn_user_id"], name: "index_game_states_on_current_turn_user_id"
+    t.index ["player1_id"], name: "index_game_states_on_player1_id"
+    t.index ["player2_id"], name: "index_game_states_on_player2_id"
+    t.index ["room_id"], name: "index_game_states_on_room_id", unique: true
+    t.index ["status"], name: "index_game_states_on_status"
+    t.index ["winner_id"], name: "index_game_states_on_winner_id"
+  end
+
+  create_table "messages", force: :cascade do |t|
+    t.bigint "room_id", null: false
+    t.bigint "user_id", null: false
+    t.text "content", null: false
+    t.string "message_type", default: "chat", null: false
+    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.index ["created_at"], name: "index_messages_on_created_at"
+    t.index ["room_id"], name: "index_messages_on_room_id"
+    t.index ["user_id"], name: "index_messages_on_user_id"
+  end
+
+  create_table "room_participants", force: :cascade do |t|
+    t.bigint "room_id", null: false
+    t.bigint "user_id", null: false
+    t.string "role", null: false
+    t.boolean "ready_status", default: false
+    t.datetime "joined_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.index ["room_id", "user_id"], name: "index_room_participants_on_room_id_and_user_id", unique: true
+    t.index ["room_id"], name: "index_room_participants_on_room_id"
+    t.index ["user_id"], name: "index_room_participants_on_user_id"
+  end
+
+  create_table "rooms", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "room_type", null: false
+    t.string "password"
+    t.bigint "creator_id", null: false
+    t.string "status", default: "waiting", null: false
+    t.integer "max_players", default: 2, null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.index ["creator_id"], name: "index_rooms_on_creator_id"
+    t.index ["status"], name: "index_rooms_on_status"
+  end
+
   create_table "user_cards", id: :serial, force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "card_unique_id", null: false
@@ -108,6 +196,24 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_11_095804) do
   add_foreign_key "card_abilities", "cards", column: "card_unique_id", primary_key: "card_unique_id", name: "card_abilities_card_unique_id_fkey"
   add_foreign_key "card_tags", "cards", column: "card_unique_id", primary_key: "card_unique_id", name: "card_tags_card_unique_id_fkey"
   add_foreign_key "card_types", "cards", column: "card_unique_id", primary_key: "card_unique_id", name: "card_types_card_unique_id_fkey"
+  add_foreign_key "game_actions", "game_cards", column: "source_card_id"
+  add_foreign_key "game_actions", "game_cards", column: "target_card_id"
+  add_foreign_key "game_actions", "game_states"
+  add_foreign_key "game_actions", "users"
+  add_foreign_key "game_cards", "cards", column: "card_unique_id", primary_key: "card_unique_id"
+  add_foreign_key "game_cards", "game_cards", column: "attached_to_game_card_id"
+  add_foreign_key "game_cards", "game_states"
+  add_foreign_key "game_cards", "users"
+  add_foreign_key "game_states", "rooms"
+  add_foreign_key "game_states", "users", column: "current_turn_user_id"
+  add_foreign_key "game_states", "users", column: "player1_id"
+  add_foreign_key "game_states", "users", column: "player2_id"
+  add_foreign_key "game_states", "users", column: "winner_id"
+  add_foreign_key "messages", "rooms"
+  add_foreign_key "messages", "users"
+  add_foreign_key "room_participants", "rooms"
+  add_foreign_key "room_participants", "users"
+  add_foreign_key "rooms", "users", column: "creator_id"
   add_foreign_key "user_cards", "cards", column: "card_unique_id", primary_key: "card_unique_id", name: "user_cards_card_unique_id_fkey"
   add_foreign_key "user_cards", "users", name: "user_cards_user_id_fkey"
 end
