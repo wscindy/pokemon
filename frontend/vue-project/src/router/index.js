@@ -3,6 +3,8 @@ import LandingPage from '../views/LandingPage.vue'
 import ProfileSetup from '../views/ProfileSetup.vue'
 import GameLobby from '../views/GameLobby.vue'
 import DeckBuilder from '@/views/DeckBuilder.vue'
+import GameTest from '../views/GameTest.vue'
+import GameBoard from '../views/GameBoard.vue' 
 
 const routes = [
   {
@@ -24,6 +26,16 @@ const routes = [
     path: '/deck-builder',
     name: 'DeckBuilder',
     component: DeckBuilder
+  },
+  {
+  path: '/test',
+  name: 'GameTest',
+  component: GameTest
+  },
+  {
+    path: '/game/:id',
+    name: 'GameBoard',
+    component: GameBoard
   }
 ]
 

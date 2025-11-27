@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { gameAPI } from '@/services/api'  // 新增這行
 
 const router = useRouter()
 
@@ -9,7 +10,8 @@ const userProfile = ref({
   avatarId: null
 })
 
-
+// 新增 loading 狀態
+const isStartingBattle = ref(false)
 
 // 預設頭像列表（與 ProfileSetup 相同）
 const avatars = [
@@ -46,8 +48,30 @@ const handleLogout = () => {
   router.push({ name: 'Landing' })
 }
 
-const handleStartBattle = () => {
-  alert('開始對戰功能開發中...')
+// 修改這個函數
+const handleStartBattle = async () => {
+  isStartingBattle.value = true
+  
+  try {
+    // 1. 初始化遊戲
+    const initResponse = await gameAPI.initializeGame()
+    const gameStateId = initResponse.data.game_state_id
+    
+    // 2. 發牌
+    await gameAPI.setupGame(gameStateId)
+    
+    // 3. 跳轉到遊戲畫面
+    router.push({ 
+      name: 'GameBoard',  // 需要建立這個路由
+      params: { id: gameStateId }
+    })
+    
+  } catch (error) {
+    console.error('開始對戰失敗:', error)
+    alert('開始對戰失敗: ' + (error.response?.data?.error || error.message))
+  } finally {
+    isStartingBattle.value = false
+  }
 }
 
 const handleSpectate = () => {
@@ -86,9 +110,15 @@ const handleDeckManagement = () => {
         
         <!-- 主要功能按鈕 -->
         <div class="action-grid">
-          <button class="action-card primary" @click="handleStartBattle">
+          <button 
+            class="action-card primary" 
+            @click="handleStartBattle"
+            :disabled="isStartingBattle"
+          >
             <div class="action-icon">⚔️</div>
-            <h3 class="action-title">開始對戰</h3>
+            <h3 class="action-title">
+              {{ isStartingBattle ? '準備中...' : '開始對戰' }}
+            </h3>
             <p class="action-description">尋找對手進行即時對戰</p>
           </button>
           
@@ -114,7 +144,6 @@ const handleDeckManagement = () => {
     </main>
   </div>
 </template>
-
 <style scoped>
 .game-lobby {
   min-height: 100vh;

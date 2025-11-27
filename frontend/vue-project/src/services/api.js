@@ -43,9 +43,55 @@ export const deckAPI = {
     return api.post('/deck/validate', { cards })
   },
   
-  // 刪除牌組（新增）
+  // 刪除牌組
   deleteDeck() {
     return api.delete('/deck')
+  }
+}
+
+  // 遊戲相關 API (新增)
+export const gameAPI = {
+  // 初始化遊戲
+  initializeGame() {
+    return api.post('/games/initialize')
+  },
+
+  // 發牌
+  setupGame(gameStateId) {
+    return api.post(`/games/${gameStateId}/setup`)
+  },
+
+  // 查詢遊戲狀態
+  getGameState(gameStateId) {
+    return api.get(`/games/${gameStateId}/state`)
+  },
+
+  // 之後可以加入更多遊戲操作
+  // 抽牌
+  drawCard(gameStateId) {
+    return api.post(`/games/${gameStateId}/draw`)
+  },
+  
+  // 出牌
+  playCard(gameStateId, cardId, position) {
+    return api.post(`/games/${gameStateId}/play`, { 
+      card_id: cardId, 
+      position 
+    })
+  },
+  
+  // 攻擊
+  attack(gameStateId, attackerId, defenderId, attackIndex) {
+    return api.post(`/games/${gameStateId}/attack`, {
+      attacker_id: attackerId,
+      defender_id: defenderId,
+      attack_index: attackIndex
+    })
+  },
+  
+  // 結束回合
+  endTurn(gameStateId) {
+    return api.post(`/games/${gameStateId}/end_turn`)
   }
 }
 
