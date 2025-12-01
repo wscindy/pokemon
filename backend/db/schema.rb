@@ -105,10 +105,13 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_23_114026) do
     t.boolean "is_evolved_this_turn", default: false
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "parent_card_id"
+    t.integer "stack_order", default: 0
     t.index ["attached_to_game_card_id"], name: "index_game_cards_on_attached_to_game_card_id"
     t.index ["card_unique_id"], name: "index_game_cards_on_card_unique_id"
     t.index ["game_state_id", "user_id", "zone"], name: "index_game_cards_on_state_user_zone"
     t.index ["game_state_id"], name: "index_game_cards_on_game_state_id"
+    t.index ["parent_card_id"], name: "index_game_cards_on_parent_card_id"
     t.index ["user_id"], name: "index_game_cards_on_user_id"
   end
 
@@ -202,6 +205,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_23_114026) do
   add_foreign_key "game_actions", "users"
   add_foreign_key "game_cards", "cards", column: "card_unique_id", primary_key: "card_unique_id"
   add_foreign_key "game_cards", "game_cards", column: "attached_to_game_card_id"
+  add_foreign_key "game_cards", "game_cards", column: "parent_card_id"
   add_foreign_key "game_cards", "game_states"
   add_foreign_key "game_cards", "users"
   add_foreign_key "game_states", "rooms"
