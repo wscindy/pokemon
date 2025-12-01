@@ -105,6 +105,9 @@ brew services start postgresql@15
 # 檢查
 brew services list | grep postgres
 
+ PostgreSQL 是官方安裝包版本。不需要用 brew services start 啟動，因為它不是 Homebrew 管理的。
+ 如果要管理官方版本的 PostgreSQL，應該用官方提供的工具或 pg_ctl 指令，不要用 Homebrew。
+
 # 方法 1️⃣：看進程
 ps aux | grep postgres
 
@@ -126,6 +129,9 @@ lsof -i :5432
 # 啟動前端專案
 cd frontend/vue-project 
 npm run dev
+
+# 啟動後端
+rails server
 
 # 建表
 rails generate model User email:string name:string uid:string provider:string avatar_url:string online_status:string
@@ -172,3 +178,30 @@ rails routes | grep cards
 # 2. 如果沒有 search 路由，修改 config/routes.rb
 # 3. 重新啟動伺服器
 # 4. 測試 API
+
+
+# schema location is here: pokemon/backend/db/schema.rb 如果要問目前schema長怎樣
+
+
+# Rails Console vs Rails DBConsole
+
+
+| 特性 | `rails console` (rails c) | `rails dbconsole` (rails db) |
+|------|---------------------------|------------------------------|
+| **用途** | 進入 Ruby/Rails 環境 | 直接進入資料庫 SQL 介面 |
+| **語言** | Ruby | SQL (PostgreSQL/MySQL 等) |
+| **操作對象** | Model、ActiveRecord、Ruby 代碼 | 資料庫表、索引、原始 SQL |
+| **適合場景** | 測試業務邏輯、操作 Model、查詢資料 | 執行 SQL、建立/刪除索引、查看資料庫結構 |
+| **退出方式** | `exit` 或 `quit` 或 `Ctrl+D` | `\q` 或 `Ctrl+D` |
+
+---
+
+# 查看目前的router有誰
+# rails routes | grep games
+會出現這樣：
+api_v1_api_games_initialize POST   /api/v1/api/games/initialize(.:format)
+api/v1/api/games#initialize_game
+api_v1_api POST   /api/v1/api/games/:id/setup(.:format)
+api/v1/api/games#setup_game
+GET    /api/v1/api/games/:id/state(.:format)
+api/v1/api/games#game_state
