@@ -83,7 +83,7 @@ module Api
         end
       end
 
-      # 🆕 移動卡牌到指定區域
+      # 移動卡牌到指定區域
       def move_card
         game_card = GameCard.find(params[:card_id])
         to_zone = params[:to_zone]
@@ -95,21 +95,22 @@ module Api
           return
         end
 
-        # 如果是疊加的卡片,先取消疊加
-        game_card.unstack if game_card.parent_card_id.present?
+        # ✅ 修復:清除所有附加關係
+        game_card.update(
+          zone: to_zone,
+          zone_position: to_position,
+          attached_to_game_card_id: nil,  # 清除附加關係
+          parent_card_id: nil,            # 清除疊加關係
+          stack_order: nil                # 清除疊加順序
+        )
 
-        # 移動卡片
-        if game_card.move_to_zone(to_zone, to_position)
-          render json: { 
-            message: "卡片已移至#{zone_name(to_zone)}",
-            game_card: format_game_card(game_card)
-          }, status: :ok
-        else
-          render json: { error: '移動失敗' }, status: :unprocessable_entity
-        end
+        render json: { 
+          message: "卡片已移至#{zone_name(to_zone)}",
+          game_card: format_game_card(game_card)
+        }, status: :ok
       end
 
-      # 🆕 疊加卡片
+      # 疊加卡片
       def stack_card
         card_to_stack = GameCard.find(params[:card_id])
         target_card = GameCard.find(params[:target_card_id])
@@ -120,18 +121,31 @@ module Api
           return
         end
 
-        # 執行疊加
-        if target_card.stack_card(card_to_stack)
+        # ✅ 修復:使用 transaction 確保原子性
+        ActiveRecord::Base.transaction do
+          # 取得當前最大的 stack_order
+          max_order = GameCard.where(parent_card_id: target_card.id)
+                              .maximum(:stack_order) || 0
+
+          # 更新疊加卡片
+          card_to_stack.update!(
+            parent_card_id: target_card.id,
+            stack_order: max_order + 1,
+            zone: target_card.zone,           # 繼承目標卡片的 zone
+            zone_position: target_card.zone_position,  # 繼承位置
+            attached_to_game_card_id: nil     # 清除附加關係
+          )
+
           render json: { 
             message: '疊加成功',
-            target_card: format_game_card(target_card)
+            target_card: format_game_card(target_card.reload)
           }, status: :ok
-        else
-          render json: { error: '疊加失敗' }, status: :unprocessable_entity
         end
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: "疊加失敗: #{e.message}" }, status: :unprocessable_entity
       end
 
-      # 🆕 更新傷害值
+      # 更新傷害值
       def update_damage
         pokemon = GameCard.find(params[:pokemon_id])
         damage_value = params[:damage_taken].to_i
@@ -142,6 +156,7 @@ module Api
           return
         end
 
+        # ✅ 確保傷害值不為負數
         if pokemon.update(damage_taken: [0, damage_value].max)
           render json: { 
             message: '傷害更新成功',
@@ -152,7 +167,7 @@ module Api
         end
       end
 
-      # 🆕 轉移能量卡
+      # 轉移能量卡
       def transfer_energy
         energy_card = GameCard.find(params[:energy_id])
         from_pokemon_id = params[:from_pokemon_id]
@@ -182,7 +197,8 @@ module Api
 
         # 轉移到其他區域
         elsif to_zone.present?
-          if energy_card.update(attached_to_game_card_id: nil, zone: to_zone)
+          # ✅ 清除附加關係
+          if energy_card.update(attached_to_game_card_id: nil, zone: to_zone, zone_position: nil)
             render json: { message: "能量已移至#{zone_name(to_zone)}" }, status: :ok
           else
             render json: { error: '移動失敗' }, status: :unprocessable_entity
@@ -192,11 +208,16 @@ module Api
         end
       end
 
-      # 🆕 結束回合
+      # 結束回合
       def end_turn
         # 切換到對手
         opponent = @game_state.opponent_of(@current_user)
         
+        unless opponent
+          render json: { error: '找不到對手' }, status: :unprocessable_entity
+          return
+        end
+
         # 更新回合
         if @game_state.update(
           current_turn_user_id: opponent.id,
@@ -216,7 +237,7 @@ module Api
         end
       end
 
-      # 🆕 從牌庫抽牌
+      # 從牌庫抽牌
       def draw_cards
         count = params[:count].to_i
         
@@ -247,7 +268,7 @@ module Api
         }, status: :ok
       end
 
-      # 🆕 從棄牌堆撿牌
+      # 從棄牌堆撿牌
       def pick_from_discard
         count = params[:count].to_i
         
@@ -281,7 +302,7 @@ module Api
         }, status: :ok
       end
 
-      # 🆕 領取獎勵卡
+      # 領取獎勵卡
       def take_prize
         prize_card = GameCard.includes(:card)
                             .where(
@@ -325,22 +346,28 @@ module Api
       end
 
       def format_game_card(game_card)
-        # 🆕 只格式化主卡(避免遞迴)
-        return nil unless game_card.main_card?
+        return nil unless game_card
+        
+        # ✅ 修復:如果是附加卡或疊加卡,不格式化(避免遞迴)
+        return nil if game_card.attached_to_game_card_id.present? || game_card.parent_card_id.present?
 
         # 查詢附加的能量卡
         attached_energies = GameCard.includes(:card)
-                                    .where(attached_to_game_card_id: game_card.id)
+                                    .where(attached_to_game_card_id: game_card.id, zone: 'attached')
                                     .map do |energy|
           {
             id: energy.id,
             name: energy.card.name,
-            img_url: energy.card.img_url
+            img_url: energy.card.img_url,
+            card_type: energy.card.card_type
           }
         end
 
-        # 🆕 查詢疊加的卡片
-        stacked_cards = game_card.all_stacked_cards.map do |stacked|
+        # 查詢疊加的卡片(按 stack_order 降序排列,最新的在前)
+        stacked_cards = GameCard.includes(:card)
+                                .where(parent_card_id: game_card.id)
+                                .order(stack_order: :desc)
+                                .map do |stacked|
           {
             id: stacked.id,
             name: stacked.card.name,
@@ -357,50 +384,80 @@ module Api
           img_url: game_card.card.img_url,
           card_type: game_card.card.card_type,
           hp: game_card.card.hp,
-          stage: game_card.card.stage,  # 🆕 新增 stage
-          damage_taken: game_card.damage_taken,
+          stage: game_card.card.stage,
+          damage_taken: game_card.damage_taken || 0,  # ✅ 確保有預設值
           zone: game_card.zone,
           zone_position: game_card.zone_position,
           attached_energies: attached_energies,
-          stacked_cards: stacked_cards  # 🆕 新增疊加卡片
+          stacked_cards: stacked_cards
         }
       end
 
       def get_hand_cards(game_state)
         GameCard.includes(:card)
-                .main_cards  # 🆕 只取主卡
-                .where(game_state_id: game_state.id, user_id: @current_user.id, zone: 'hand')
+                .where(
+                  game_state_id: game_state.id,
+                  user_id: @current_user.id,
+                  zone: 'hand',
+                  parent_card_id: nil,           # ✅ 只取主卡
+                  attached_to_game_card_id: nil  # ✅ 排除附加卡
+                )
                 .map { |gc| format_game_card(gc) }
+                .compact  # ✅ 移除 nil 值
       end
 
       def get_active_pokemon(game_state)
         card = GameCard.includes(:card)
-                       .main_cards  # 🆕 只取主卡
-                       .find_by(game_state_id: game_state.id, user_id: @current_user.id, zone: 'active')
+                       .find_by(
+                         game_state_id: game_state.id,
+                         user_id: @current_user.id,
+                         zone: 'active',
+                         parent_card_id: nil,           # ✅ 只取主卡
+                         attached_to_game_card_id: nil  # ✅ 排除附加卡
+                       )
         card ? format_game_card(card) : nil
       end
 
       def get_bench_pokemon(game_state)
         GameCard.includes(:card)
-                .main_cards  # 🆕 只取主卡
-                .where(game_state_id: game_state.id, user_id: @current_user.id, zone: 'bench')
+                .where(
+                  game_state_id: game_state.id,
+                  user_id: @current_user.id,
+                  zone: 'bench',
+                  parent_card_id: nil,           # ✅ 只取主卡
+                  attached_to_game_card_id: nil  # ✅ 排除附加卡
+                )
                 .order(:zone_position)
                 .map { |gc| format_game_card(gc) }
+                .compact  # ✅ 移除 nil 值
       end
 
       def get_deck_count(game_state)
-        GameCard.where(game_state_id: game_state.id, user_id: @current_user.id, zone: 'deck').count
+        GameCard.where(
+          game_state_id: game_state.id,
+          user_id: @current_user.id,
+          zone: 'deck'
+        ).count
       end
 
       def get_prize_count(game_state)
-        GameCard.where(game_state_id: game_state.id, user_id: @current_user.id, zone: 'prize').count
+        GameCard.where(
+          game_state_id: game_state.id,
+          user_id: @current_user.id,
+          zone: 'prize'
+        ).count
       end
 
       def get_discard_count(game_state)
-        GameCard.where(game_state_id: game_state.id, user_id: @current_user.id, zone: 'discard').count
+        # ✅ 修復:確保正確計算棄牌堆數量
+        GameCard.where(
+          game_state_id: game_state.id,
+          user_id: @current_user.id,
+          zone: 'discard'
+        ).count
       end
 
-      # 🆕 區域名稱對應
+      # 區域名稱對應
       def zone_name(zone)
         {
           'hand' => '手牌',
@@ -408,7 +465,8 @@ module Api
           'deck' => '牌堆',
           'active' => '戰鬥場',
           'bench' => '備戰區',
-          'prize' => '獎勵卡'
+          'prize' => '獎勵卡',
+          'attached' => '附加'
         }[zone] || zone
       end
     end
