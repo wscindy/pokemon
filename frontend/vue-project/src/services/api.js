@@ -87,7 +87,7 @@ export const gameAPI = {
     })
   },
 
-  // 🆕 移動卡牌(完全自由)
+  // 移動卡牌(完全自由)
   moveCard(gameStateId, cardId, toZone, toPosition = null) {
     return api.post(`/games/${gameStateId}/move_card`, {
       card_id: cardId,
@@ -96,7 +96,7 @@ export const gameAPI = {
     })
   },
 
-  // 🆕 疊加卡牌(進化或其他)
+  // 疊加卡牌(進化或其他)
   stackCard(gameStateId, cardId, targetCardId) {
     return api.post(`/games/${gameStateId}/stack_card`, {
       card_id: cardId,           // 要疊上去的卡
@@ -104,7 +104,7 @@ export const gameAPI = {
     })
   },
 
-  // 🆕 更新傷害值
+  // 更新傷害值
   updateDamage(gameStateId, pokemonId, damageValue) {
     return api.post(`/games/${gameStateId}/update_damage`, {
       pokemon_id: pokemonId,
@@ -112,7 +112,7 @@ export const gameAPI = {
     })
   },
 
-  // 🆕 轉移能量卡(完全自由)
+  // 轉移能量卡(完全自由)
   transferEnergy(gameStateId, energyId, fromPokemonId, toPokemonId = null, toZone = null) {
     return api.post(`/games/${gameStateId}/transfer_energy`, {
       energy_id: energyId,
@@ -122,7 +122,7 @@ export const gameAPI = {
     })
   },
 
-  // 🆕 結束回合
+  // 結束回合
   endTurn(gameStateId) {
     return api.post(`/games/${gameStateId}/end_turn`)
   },
@@ -134,6 +134,25 @@ export const gameAPI = {
       defender_id: defenderId,
       attack_index: attackIndex
     })
+  },
+
+   // 從牌庫抽牌
+  drawCards(gameStateId, count) {
+    return api.post(`/games/${gameStateId}/draw_cards`, {
+      count: count
+    })
+  },
+
+  // 從棄牌堆撿牌
+  pickFromDiscard(gameStateId, count) {
+    return api.post(`/games/${gameStateId}/pick_from_discard`, {
+      count: count
+    })
+  },
+
+  // 領取獎勵卡
+  takePrize(gameStateId) {
+    return api.post(`/games/${gameStateId}/take_prize`)
   }
 }
 
