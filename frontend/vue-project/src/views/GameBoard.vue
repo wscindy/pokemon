@@ -30,7 +30,7 @@ const sortedHandCards = computed(() => {
   })
 })
 
-// ========== 新增:按鈕禁用邏輯 ==========
+// ========== 按鈕禁用邏輯 ==========
 
 // 戰鬥場是否已有牌
 const isActiveSlotFilled = computed(() => {
@@ -60,19 +60,45 @@ const canPlayToBench = computed(() => {
   return !isBenchFull.value
 })
 
-// ========== 新增:格式化疊加卡片顯示 ==========
+// ✅ 新增:能否移動到戰鬥場(場上寶可夢)
+const canMoveToActive = computed(() => {
+  if (!selectedPokemonOnField.value) return false
+  // 如果已經在戰鬥場,不能移動
+  if (selectedPokemonOnField.value.zone === 'active') return false
+  // 如果戰鬥場已有其他牌,不能移動
+  return !isActiveSlotFilled.value
+})
 
-// 格式化場上寶可夢的疊加卡片(最新的在最上面)
-const formatStackedCards = (pokemon) => {
+// ========== 新增:取得要顯示的卡片 ==========
+
+// 取得要顯示的卡片(最新疊加的,或原卡)
+const getDisplayCard = (pokemon) => {
+  if (!pokemon) return null
+  
+  // 如果有疊加卡片,顯示最新的那張
+  if (pokemon.stacked_cards && pokemon.stacked_cards.length > 0) {
+    // stacked_cards 已經按 stack_order 降序排列,第一張就是最新的
+    const latestCard = pokemon.stacked_cards[0]
+    return {
+      name: latestCard.name,
+      img_url: latestCard.img_url,
+      hp: latestCard.hp || pokemon.hp,  // 如果後端沒傳 hp,用原卡的
+      card_type: latestCard.card_type
+    }
+  }
+  
+  // 沒有疊加,顯示原卡
+  return pokemon
+}
+
+// 取得除了最新那張以外的所有疊加卡片
+const getStackedCardsExceptLatest = (pokemon) => {
   if (!pokemon.stacked_cards || pokemon.stacked_cards.length === 0) {
     return []
   }
   
-  // 按照 created_at 或 id 排序,最新的在前面
-  return [...pokemon.stacked_cards].sort((a, b) => {
-    // 假設 id 越大越新,或者可以用 created_at
-    return b.id - a.id
-  })
+  // 跳過第一張(最新的),返回其他的
+  return pokemon.stacked_cards.slice(1)
 }
 
 // 載入遊戲狀態
@@ -457,9 +483,10 @@ onMounted(() => {
                 }"
                 @click="handleFieldPokemonClick(gameState.active_pokemon)"
               >
-                <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
-                <p class="pokemon-name">{{ gameState.active_pokemon.name }}</p>
-                <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ gameState.active_pokemon.hp }}</p>
+                <!-- ✅ 顯示最新疊加的卡片 -->
+                <img :src="getDisplayCard(gameState.active_pokemon).img_url" :alt="getDisplayCard(gameState.active_pokemon).name">
+                <p class="pokemon-name">{{ getDisplayCard(gameState.active_pokemon).name }}</p>
+                <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.active_pokemon).hp }}</p>
                 
                 <!-- 傷害調整 -->
                 <div class="damage-controls">
@@ -488,14 +515,21 @@ onMounted(() => {
                   </div>
                 </div>
 
-                <!-- 疊加的卡片 (修改:最新的顯示最大) -->
+                <!-- ✅ 疊加的卡片:顯示原卡和被壓住的卡片 -->
                 <div v-if="gameState.active_pokemon.stacked_cards?.length > 0" class="stacked-cards-container">
+                  <!-- 顯示原本的基礎卡片 -->
                   <div 
-                    v-for="(card, index) in formatStackedCards(gameState.active_pokemon)" 
+                    class="stacked-mini-card"
+                    :title="gameState.active_pokemon.name"
+                  >
+                    <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
+                  </div>
+                  
+                  <!-- 顯示其他被壓住的進化卡(除了最新的) -->
+                  <div 
+                    v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)" 
                     :key="card.id"
                     class="stacked-mini-card"
-                    :class="{ 'is-latest': index === 0 }"
-                    :style="{ zIndex: formatStackedCards(gameState.active_pokemon).length - index }"
                     :title="card.name"
                   >
                     <img :src="card.img_url" :alt="card.name">
@@ -520,9 +554,10 @@ onMounted(() => {
                   }"
                   @click="handleFieldPokemonClick(pokemon)"
                 >
-                  <img :src="pokemon.img_url" :alt="pokemon.name">
-                  <p class="pokemon-name">{{ pokemon.name }}</p>
-                  <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ pokemon.hp }}</p>
+                  <!-- ✅ 顯示最新疊加的卡片 -->
+                  <img :src="getDisplayCard(pokemon).img_url" :alt="getDisplayCard(pokemon).name">
+                  <p class="pokemon-name">{{ getDisplayCard(pokemon).name }}</p>
+                  <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ getDisplayCard(pokemon).hp }}</p>
                   
                   <!-- 傷害調整(小版) -->
                   <div class="damage-controls-small">
@@ -551,14 +586,17 @@ onMounted(() => {
                     </div>
                   </div>
 
-                  <!-- 疊加的卡片(小版,修改:最新的顯示最大) -->
+                  <!-- ✅ 疊加的卡片(小版) -->
                   <div v-if="pokemon.stacked_cards?.length > 0" class="stacked-cards-container-small">
+                    <!-- 原本的基礎卡片 -->
+                    <div class="stacked-mini-card-small" :title="pokemon.name">
+                      <img :src="pokemon.img_url" :alt="pokemon.name">
+                    </div>
+                    <!-- 其他被壓住的卡片 -->
                     <div 
-                      v-for="(card, index) in formatStackedCards(pokemon)" 
+                      v-for="card in getStackedCardsExceptLatest(pokemon)" 
                       :key="card.id"
                       class="stacked-mini-card-small"
-                      :class="{ 'is-latest': index === 0 }"
-                      :style="{ zIndex: formatStackedCards(pokemon).length - index }"
                       :title="card.name"
                     >
                       <img :src="card.img_url" :alt="card.name">
@@ -643,7 +681,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <!-- 操作選單:手牌 (修改:加入按鈕禁用邏輯) -->
+      <!-- 操作選單:手牌 -->
       <div v-if="selectedMode === 'hand_card' && selectedCard" class="action-menu">
         <div class="action-menu-header">
           <h3>{{ selectedCard.name }}</h3>
@@ -710,7 +748,7 @@ onMounted(() => {
       <!-- 操作選單:場上寶可夢 -->
       <div v-if="selectedMode === 'field_pokemon' && selectedPokemonOnField" class="action-menu">
         <div class="action-menu-header">
-          <h3>{{ selectedPokemonOnField.name }}</h3>
+          <h3>{{ getDisplayCard(selectedPokemonOnField).name }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
         <div class="action-buttons">
@@ -735,7 +773,10 @@ onMounted(() => {
           <button 
             v-if="selectedPokemonOnField.zone !== 'active'"
             @click="moveCardTo(selectedPokemonOnField, 'active')"
+            :disabled="!canMoveToActive"
             class="action-btn primary"
+            :class="{ 'disabled': !canMoveToActive }"
+            :title="!canMoveToActive ? '戰鬥場已有牌' : ''"
           >
             移到戰鬥場
           </button>
@@ -1005,7 +1046,7 @@ h4 {
   color: black;
   padding: 15px;
   border-radius: 12px;
-  width: 200px;
+  width: 220px;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
@@ -1092,8 +1133,8 @@ h4 {
 }
 
 .energy-mini {
-  width: 35px;
-  height: 50px;
+  width: 40px;
+  height: 56px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid #cbd5e0;
@@ -1103,7 +1144,7 @@ h4 {
 }
 
 .energy-mini:hover {
-  transform: scale(1.5);
+  transform: scale(1.8);
   z-index: 10;
   box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
 }
@@ -1115,41 +1156,46 @@ h4 {
   margin: 0;
 }
 
-/* ========== 疊加卡片容器 (修改:最新的顯示最大) ========== */
+/* ========== 疊加卡片容器 ========== */
 .stacked-cards-container {
-  display: flex;
-  gap: 3px;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid #e2e8f0;
-  flex-wrap: wrap;
-  align-items: flex-end;
+}
+
+.stacked-label {
+  width: 100%;
+  font-size: 11px;
+  color: #718096;
+  margin-bottom: 6px;
+  font-weight: bold;
+  text-align: left;
+}
+
+.stacked-cards-container > div:not(.stacked-label) {
+  display: inline-block;
+  margin-right: 4px;
 }
 
 .stacked-mini-card {
-  width: 30px;
-  height: 42px;
-  border-radius: 3px;
-  overflow: hidden;
-  border: 1px solid #cbd5e0;
-  opacity: 0.7;
-  transition: all 0.2s;
-  cursor: help;
-}
-
-/* 最新疊加的卡片(第一張)顯示為大張 */
-.stacked-mini-card.is-latest {
   width: 45px;
   height: 63px;
-  opacity: 1;
-  border: 2px solid #fbbf24;
-  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #cbd5e0;
+  opacity: 0.8;
+  transition: all 0.2s;
+  cursor: help;
+  display: inline-block;
+  vertical-align: top;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .stacked-mini-card:hover {
   opacity: 1;
-  transform: scale(1.5);
-  z-index: 999 !important;
+  transform: scale(2.5);
+  z-index: 999;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .stacked-mini-card img {
@@ -1218,18 +1264,18 @@ h4 {
 /* 能量卡容器(小版) */
 .energy-container-small {
   display: flex;
-  gap: 2px;
-  margin-top: 5px;
-  padding-top: 5px;
+  gap: 3px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid #e2e8f0;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .energy-mini-small {
-  width: 20px;
-  height: 28px;
-  border-radius: 2px;
+  width: 28px;
+  height: 39px;
+  border-radius: 3px;
   overflow: hidden;
   border: 1px solid #cbd5e0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -1238,8 +1284,9 @@ h4 {
 }
 
 .energy-mini-small:hover {
-  transform: scale(2);
+  transform: scale(2.5);
   z-index: 10;
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.5);
 }
 
 .energy-mini-small img {
@@ -1249,41 +1296,37 @@ h4 {
   margin: 0;
 }
 
-/* 疊加卡片容器(小版,修改:最新的顯示最大) */
+/* 疊加卡片容器(小版) */
 .stacked-cards-container-small {
-  display: flex;
-  gap: 2px;
-  margin-top: 5px;
-  padding-top: 5px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid #e2e8f0;
-  flex-wrap: wrap;
-  align-items: flex-end;
+}
+
+.stacked-cards-container-small > div {
+  display: inline-block;
+  margin-right: 3px;
 }
 
 .stacked-mini-card-small {
-  width: 18px;
-  height: 25px;
-  border-radius: 2px;
+  width: 30px;
+  height: 42px;
+  border-radius: 3px;
   overflow: hidden;
   border: 1px solid #cbd5e0;
-  opacity: 0.7;
+  opacity: 0.8;
   transition: all 0.2s;
   cursor: help;
-}
-
-/* 最新疊加的卡片(第一張)顯示為大張 */
-.stacked-mini-card-small.is-latest {
-  width: 28px;
-  height: 39px;
-  opacity: 1;
-  border: 1px solid #fbbf24;
-  box-shadow: 0 1px 4px rgba(251, 191, 36, 0.4);
+  display: inline-block;
+  vertical-align: top;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .stacked-mini-card-small:hover {
   opacity: 1;
-  transform: scale(2);
-  z-index: 999 !important;
+  transform: scale(3);
+  z-index: 999;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .stacked-mini-card-small img {
