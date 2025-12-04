@@ -5,7 +5,8 @@ module Api
       before_action :set_user
       before_action :set_game_state, only: [
         :setup_game, :game_state, :play_card, :attach_energy,
-        :move_card, :stack_card, :update_damage, :transfer_energy, :end_turn  # 🆕 新增
+        :move_card, :stack_card, :update_damage, :transfer_energy, :end_turn,
+        :draw_cards, :pick_from_discard, :take_prize
       ]
 
       # ========== Public Actions ==========
@@ -212,6 +213,97 @@ module Api
           }, status: :ok
         else
           render json: { error: '結束回合失敗' }, status: :unprocessable_entity
+        end
+      end
+
+      # 🆕 從牌庫抽牌
+      def draw_cards
+        count = params[:count].to_i
+        
+        if count <= 0 || count > 10
+          render json: { error: '抽牌數量必須在 1-10 張之間' }, status: :unprocessable_entity
+          return
+        end
+
+        deck_cards = GameCard.where(
+          game_state_id: @game_state.id,
+          user_id: @current_user.id,
+          zone: 'deck'
+        ).limit(count)
+
+        if deck_cards.empty?
+          render json: { error: '牌庫已空' }, status: :unprocessable_entity
+          return
+        end
+
+        # 移動到手牌
+        deck_cards.each do |card|
+          card.update(zone: 'hand', zone_position: nil)
+        end
+
+        render json: {
+          message: "抽了 #{deck_cards.count} 張牌",
+          drawn_cards: deck_cards.map { |gc| format_game_card(gc) }
+        }, status: :ok
+      end
+
+      # 🆕 從棄牌堆撿牌
+      def pick_from_discard
+        count = params[:count].to_i
+        
+        if count <= 0 || count > 10
+          render json: { error: '撿牌數量必須在 1-10 張之間' }, status: :unprocessable_entity
+          return
+        end
+
+        discard_cards = GameCard.includes(:card)
+                                .where(
+                                  game_state_id: @game_state.id,
+                                  user_id: @current_user.id,
+                                  zone: 'discard'
+                                )
+                                .order(updated_at: :desc)
+                                .limit(count)
+
+        if discard_cards.empty?
+          render json: { error: '棄牌堆已空' }, status: :unprocessable_entity
+          return
+        end
+
+        # 移動到手牌
+        discard_cards.each do |card|
+          card.update(zone: 'hand', zone_position: nil)
+        end
+
+        render json: {
+          message: "從棄牌堆撿了 #{discard_cards.count} 張牌",
+          picked_cards: discard_cards.map { |gc| format_game_card(gc) }
+        }, status: :ok
+      end
+
+      # 🆕 領取獎勵卡
+      def take_prize
+        prize_card = GameCard.includes(:card)
+                            .where(
+                              game_state_id: @game_state.id,
+                              user_id: @current_user.id,
+                              zone: 'prize'
+                            )
+                            .first
+
+        unless prize_card
+          render json: { error: '沒有獎勵卡可領取' }, status: :unprocessable_entity
+          return
+        end
+
+        # 移動到手牌
+        if prize_card.update(zone: 'hand', zone_position: nil)
+          render json: {
+            message: '領取獎勵卡成功',
+            prize_card: format_game_card(prize_card)
+          }, status: :ok
+        else
+          render json: { error: '領取失敗' }, status: :unprocessable_entity
         end
       end
 

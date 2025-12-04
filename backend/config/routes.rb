@@ -24,6 +24,11 @@ Rails.application.routes.draw do
       post 'games/:id/update_damage', to: 'games#update_damage'
       post 'games/:id/transfer_energy', to: 'games#transfer_energy'
       post 'games/:id/end_turn', to: 'games#end_turn'
+
+      # 抽牌相關
+      post 'games/:id/draw_cards', to: 'games#draw_cards'
+      post 'games/:id/pick_from_discard', to: 'games#pick_from_discard'
+      post 'games/:id/take_prize', to: 'games#take_prize'
     end
   end
 end
