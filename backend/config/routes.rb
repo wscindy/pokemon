@@ -29,6 +29,7 @@ Rails.application.routes.draw do
       post 'games/:id/draw_cards', to: 'games#draw_cards'
       post 'games/:id/pick_from_discard', to: 'games#pick_from_discard'
       post 'games/:id/take_prize', to: 'games#take_prize'
+      post 'games/:id/move_stadium_card', to: 'games#move_stadium_card'
     end
   end
 end

@@ -10,7 +10,7 @@ class GameCard < ApplicationRecord
   has_many :stacked_cards, class_name: 'GameCard', foreign_key: :parent_card_id, dependent: :nullify
 
   validates :zone, inclusion: { 
-    in: ['hand', 'deck', 'active', 'bench', 'prize', 'discard', 'attached'] 
+    in: ['hand', 'deck', 'active', 'bench', 'prize', 'discard', 'attached', 'stadium'] 
   }
 
   scope :in_deck, -> { where(zone: 'deck') }
