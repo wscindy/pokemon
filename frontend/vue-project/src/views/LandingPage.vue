@@ -1,33 +1,92 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import authService from '@/services/auth'
+import websocketService from '@/services/websocket'
 
 const router = useRouter()
 const isLoading = ref(false)
 
-// 模擬 Google 登入（之後再串接真的 Google OAuth）
-const handleGoogleLogin = async () => {
+// Google 登入處理（改用彈窗流程）
+const handleGoogleLogin = () => {
   isLoading.value = true
   
-  // TODO: 之後這裡會呼叫 POST /api/auth/google
-  // 現在先模擬登入成功
-  setTimeout(() => {
-    // 模擬新用戶
-    const isNewUser = true
-    
-    if (isNewUser) {
-      // 新用戶 -> 去設定頁面
-      router.push({ name: 'ProfileSetup' })
-    } else {
-      // 舊用戶 -> 直接進大廳
-      localStorage.setItem('authToken', 'fake-jwt-token')
-      router.push({ name: 'GameLobby' })
-    }
-    
-    isLoading.value = false
-  }, 1500)
+  // 使用 Google OAuth 2.0 彈窗流程
+  const clientId = '492452439420-92olit1oung11aun1qh5kaagsr8hi83u.apps.googleusercontent.com'
+  const redirectUri = 'http://localhost:5173/auth/callback'
+  const scope = 'email profile'
+  
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${clientId}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=token id_token&` +
+    `scope=${encodeURIComponent(scope)}&` +
+    `nonce=${generateNonce()}&` +
+    `prompt=select_account`
+  
+  // 開啟彈窗
+  const width = 500
+  const height = 600
+  const left = window.screen.width / 2 - width / 2
+  const top = window.screen.height / 2 - height / 2
+  
+  const popup = window.open(
+    authUrl,
+    'Google Login',
+    `width=${width},height=${height},left=${left},top=${top}`
+  )
+  
+  // 監聽彈窗回傳的訊息
+  window.addEventListener('message', handleAuthCallback)
 }
+
+// 生成 nonce
+const generateNonce = () => {
+  return Math.random().toString(36).substring(2, 15)
+}
+
+// 處理認證回調
+const handleAuthCallback = async (event) => {
+  // 安全檢查：確認訊息來源
+  if (event.origin !== window.location.origin) {
+    return
+  }
+  
+  if (event.data.type === 'google-auth-success') {
+    try {
+      const idToken = event.data.idToken
+      
+      // 呼叫後端 API 驗證
+      const result = await authService.loginWithGoogle(idToken)
+      
+      console.log('Login successful:', result.user)
+      
+      // 連接 WebSocket
+      websocketService.connect(result.access_token)
+      
+      // 判斷是新用戶還是舊用戶
+      const isNewUser = !result.user.name || result.user.name === result.user.email
+      
+      if (isNewUser) {
+        router.push({ name: 'ProfileSetup' })
+      } else {
+        router.push({ name: 'GameLobby' })
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      alert('登入失敗，請稍後再試')
+    } finally {
+      isLoading.value = false
+      window.removeEventListener('message', handleAuthCallback)
+    }
+  }
+}
+
+onMounted(() => {
+  // 不需要載入 Google Identity Services
+})
 </script>
+
 
 <template>
   <div class="landing-page">

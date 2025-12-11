@@ -36,6 +36,11 @@ const routes = [
     path: '/game/:id',
     name: 'GameBoard',
     component: GameBoard
+  },
+  {
+  path: '/auth/callback',
+  name: 'AuthCallback',
+  component: () => import('@/views/AuthCallback.vue')
   }
 ]
 

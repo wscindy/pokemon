@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import authService from '@/services/auth'
 
 const router = useRouter()
 
@@ -9,7 +10,7 @@ const nickname = ref('')
 const nicknameError = ref('')
 const isSubmitting = ref(false)
 
-// 預設頭像列表（暫時用 emoji，之後替換成真實圖片）
+// 預設頭像列表
 const avatars = [
   { id: 1, emoji: '⚡', name: 'Pikachu' },
   { id: 2, emoji: '🔥', name: 'Charizard' },
@@ -59,20 +60,26 @@ const handleSubmit = async () => {
   
   isSubmitting.value = true
   
-  // TODO: 之後這裡會呼叫 POST /api/users/profile
-  // 現在先模擬 API 請求
-  setTimeout(() => {
-    // 儲存 token 和使用者資料
-    localStorage.setItem('authToken', 'fake-jwt-token')
-    localStorage.setItem('userProfile', JSON.stringify({
-      nickname: nickname.value,
-      avatarId: selectedAvatar.value
-    }))
+  try {
+    // 取得選中的頭像
+    const avatar = avatars.find(a => a.id === selectedAvatar.value)
+    
+    // 呼叫 API 更新個人資料
+    await authService.updateProfile({
+      name: nickname.value,
+      avatar_url: avatar.emoji  // 存 emoji 或其他識別碼
+    })
+    
+    console.log('Profile updated successfully')
     
     // 前往遊戲大廳
     router.push({ name: 'GameLobby' })
+  } catch (error) {
+    console.error('Profile update failed:', error)
+    alert('設定失敗，請稍後再試')
+  } finally {
     isSubmitting.value = false
-  }, 1000)
+  }
 }
 </script>
 
