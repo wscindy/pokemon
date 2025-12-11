@@ -1691,7 +1691,7 @@ onMounted(() => {
   padding: 10px;
   min-height: 200px;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   -webkit-overflow-scrolling: touch;
 }
 
