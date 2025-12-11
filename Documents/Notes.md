@@ -205,3 +205,19 @@ api_v1_api POST   /api/v1/api/games/:id/setup(.:format)
 api/v1/api/games#setup_game
 GET    /api/v1/api/games/:id/state(.:format)
 api/v1/api/games#game_state
+
+
+----
+
+如何在後端加log
+
+      # 移動競技場卡到指定玩家的指定區域
+      def move_stadium_card
+        # 🔍 看看到底收到什麼參數
+        Rails.logger.info "===== move_stadium_card 收到的參數 ====="
+        Rails.logger.info "完整 params: #{params.inspect}"
+        Rails.logger.info "card_id: #{params[:card_id].inspect}"
+        Rails.logger.info "stadium_card_id: #{params[:stadium_card_id].inspect}"
+        Rails.logger.info "====================================="
+        # ✅ 使用 @game_state 來查找卡片（更安全）
+        stadium_card = @game_state.game_cards.find_by(id: params[:card_id])
