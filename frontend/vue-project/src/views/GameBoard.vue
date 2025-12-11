@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { gameAPI } from '@/services/api'
 
@@ -24,6 +24,15 @@ const drawCount = ref(1)
 // 選中的競技場卡
 const selectedStadiumCard = ref(null)
 
+// 操作記錄
+const actionLogs = ref([])
+const isLogPanelExpanded = ref(true)
+const logContainer = ref(null)
+
+// 卡片彈出動畫
+const popupCard = ref(null)
+const showPopup = ref(false)
+
 // 排序後的手牌
 const sortedHandCards = computed(() => {
   if (!gameState.value?.hand) return []
@@ -31,6 +40,46 @@ const sortedHandCards = computed(() => {
     return a.card_unique_id.localeCompare(b.card_unique_id)
   })
 })
+
+// ========== 操作記錄功能 ==========
+
+const addLog = (message, type = 'info') => {
+  const timestamp = new Date().toLocaleTimeString('zh-TW', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit'
+  })
+  
+  actionLogs.value.push({
+    id: Date.now(),
+    message,
+    type, // 'info', 'player', 'opponent', 'system'
+    timestamp
+  })
+  
+  // 自動滾動到最新
+  nextTick(() => {
+    if (logContainer.value) {
+      logContainer.value.scrollTop = logContainer.value.scrollHeight
+    }
+  })
+}
+
+const toggleLogPanel = () => {
+  isLogPanelExpanded.value = !isLogPanelExpanded.value
+}
+
+// ========== 卡片彈出動畫 ==========
+
+const showCardPopup = (card, action = '使用') => {
+  popupCard.value = { ...card, action }
+  showPopup.value = true
+  
+  setTimeout(() => {
+    showPopup.value = false
+    popupCard.value = null
+  }, 1400)
+}
 
 // ========== 按鈕禁用邏輯 ==========
 
@@ -123,6 +172,7 @@ const playToActive = async () => {
   
   try {
     await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'active')
+    addLog(`你出牌：${selectedCard.value.name} → 戰鬥場`, 'player')
     await loadGameState()
     cancelSelection()
     alert('出牌成功!')
@@ -136,6 +186,7 @@ const playToBench = async () => {
   
   try {
     await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'bench')
+    addLog(`你出牌：${selectedCard.value.name} → 備戰區`, 'player')
     await loadGameState()
     cancelSelection()
     alert('出牌成功!')
@@ -149,15 +200,39 @@ const playStadiumCard = async () => {
   
   try {
     console.log('🏟️ 打出競技場卡:', selectedCard.value.name)
+    showCardPopup(selectedCard.value, '打出')
     const response = await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'stadium')
     console.log('✅ 後端回應:', response.data)
     
+    addLog(`你打出競技場卡：${selectedCard.value.name}`, 'player')
     await loadGameState()
     cancelSelection()
     alert('競技場卡已打出!')
   } catch (err) {
     console.error('❌ 打出失敗:', err)
     alert('打出失敗: ' + (err.response?.data?.error || err.message))
+  }
+}
+
+const playSupporterCard = async () => {
+  if (!selectedCard.value) return
+  
+  try {
+    console.log('👤 使用支援者卡:', selectedCard.value.name)
+    
+    // 顯示彈出動畫
+    showCardPopup(selectedCard.value, '使用')
+    
+    // 移到棄牌堆
+    await gameAPI.moveCard(gameStateId.value, selectedCard.value.id, 'discard')
+    
+    addLog(`你使用了【${selectedCard.value.name}】`, 'player')
+    await loadGameState()
+    cancelSelection()
+    alert('支援者卡已使用!')
+  } catch (err) {
+    console.error('❌ 使用失敗:', err)
+    alert('使用失敗: ' + (err.response?.data?.error || err.message))
   }
 }
 
@@ -203,6 +278,7 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
       energyCard.id,
       pokemon.id
     )
+    addLog(`你附加了${energyCard.name}到${getDisplayCard(pokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
     alert('附加能量成功!')
@@ -214,6 +290,7 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
 const stackCardOnPokemon = async (card, targetPokemon) => {
   try {
     await gameAPI.stackCard(gameStateId.value, card.id, targetPokemon.id)
+    addLog(`你將${card.name}疊加到${getDisplayCard(targetPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
     alert('疊加成功!')
@@ -225,8 +302,6 @@ const stackCardOnPokemon = async (card, targetPokemon) => {
 const moveCardTo = async (card, toZone, toPosition = null) => {
   try {
     await gameAPI.moveCard(gameStateId.value, card.id, toZone, toPosition)
-    await loadGameState()
-    cancelSelection()
     
     const zoneNames = {
       'hand': '手牌',
@@ -235,6 +310,11 @@ const moveCardTo = async (card, toZone, toPosition = null) => {
       'active': '戰鬥場',
       'bench': '備戰區'
     }
+    
+    addLog(`你將${card.name}移至${zoneNames[toZone]}`, 'player')
+    await loadGameState()
+    cancelSelection()
+    
     alert(`已移至${zoneNames[toZone]}`)
   } catch (err) {
     alert('移動失敗: ' + (err.response?.data?.error || err.message))
@@ -268,15 +348,17 @@ const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
     )
     console.log('✅ 移動成功:', response.data)
     
-    await loadGameState()
-    cancelSelection()
-    
     const zoneNames = {
       'hand': '手牌',
       'discard': '棄牌堆',
       'deck': '牌庫'
     }
     const playerName = playerId === gameState.value.current_player_id ? '你的' : '對手的'
+    
+    addLog(`競技場卡${selectedStadiumCard.value.name}移至${playerName}${zoneNames[targetZone]}`, 'system')
+    await loadGameState()
+    cancelSelection()
+    
     alert(`已移至${playerName}${zoneNames[targetZone]}`)
   } catch (err) {
     console.error('❌ 移動失敗:', err)
@@ -290,6 +372,7 @@ const adjustDamage = async (pokemon, amount) => {
   const newDamage = Math.max(0, pokemon.damage_taken + amount)
   try {
     await gameAPI.updateDamage(gameStateId.value, pokemon.id, newDamage)
+    addLog(`${getDisplayCard(pokemon).name}受到${amount > 0 ? '+' : ''}${amount}傷害（總計${newDamage}）`, 'info')
     await loadGameState()
   } catch (err) {
     alert('更新傷害失敗: ' + (err.response?.data?.error || err.message))
@@ -322,6 +405,7 @@ const transferEnergyToPokemon = async (energyData, toPokemon) => {
       toPokemon.id,
       null
     )
+    addLog(`${energyData.name}從${getDisplayCard(energyData.fromPokemon).name}轉移到${getDisplayCard(toPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
     alert('能量轉移成功!')
@@ -339,14 +423,17 @@ const moveEnergyTo = async (energyData, toZone) => {
       null,
       toZone
     )
-    await loadGameState()
-    cancelSelection()
     
     const zoneNames = {
       'hand': '手牌',
       'discard': '棄牌堆',
       'deck': '牌堆'
     }
+    
+    addLog(`${energyData.name}移至${zoneNames[toZone]}`, 'player')
+    await loadGameState()
+    cancelSelection()
+    
     alert(`能量已移至${zoneNames[toZone]}`)
   } catch (err) {
     alert('移動失敗: ' + (err.response?.data?.error || err.message))
@@ -375,6 +462,7 @@ const handlePrizeClick = () => {
 const drawFromDeck = async () => {
   try {
     const response = await gameAPI.drawCards(gameStateId.value, drawCount.value)
+    addLog(`你抽了${drawCount.value}張牌`, 'player')
     await loadGameState()
     cancelSelection()
     alert(response.data.message)
@@ -389,10 +477,11 @@ const pickFromDiscard = async () => {
     
     const response = await gameAPI.pickFromDiscard(gameStateId.value, drawCount.value)
     
+    const actualCount = response.data.picked_cards?.length || 0
+    addLog(`你從棄牌堆撿了${actualCount}張牌`, 'player')
     await loadGameState()
     cancelSelection()
     
-    const actualCount = response.data.picked_cards?.length || 0
     alert(`從棄牌堆撿了 ${actualCount} 張牌`)
     
   } catch (err) {
@@ -404,6 +493,7 @@ const pickFromDiscard = async () => {
 const takePrizeCard = async () => {
   try {
     const response = await gameAPI.takePrize(gameStateId.value)
+    addLog('你領取了1張獎勵卡', 'player')
     await loadGameState()
     cancelSelection()
     alert(response.data.message)
@@ -417,6 +507,7 @@ const takePrizeCard = async () => {
 const confirmTurn = async () => {
   try {
     await gameAPI.endTurn(gameStateId.value)
+    addLog('你結束了回合', 'system')
     await loadGameState()
     alert('回合已結束,換對手操作')
   } catch (err) {
@@ -440,6 +531,7 @@ const cancelSelection = () => {
 
 onMounted(() => {
   loadGameState()
+  addLog('遊戲開始', 'system')
 })
 </script>
 
@@ -462,6 +554,42 @@ onMounted(() => {
           ✓ 確認完成
         </button>
       </div>
+
+      <!-- 操作記錄面板 -->
+      <div class="action-log-panel" :class="{ 'collapsed': !isLogPanelExpanded }">
+        <div v-if="isLogPanelExpanded" class="log-panel-content">
+          <div class="log-panel-header">
+            <h3>📜 操作記錄</h3>
+            <button @click="toggleLogPanel" class="toggle-btn">−</button>
+          </div>
+          <div class="log-panel-body" ref="logContainer">
+            <div 
+              v-for="log in actionLogs" 
+              :key="log.id"
+              class="log-item"
+              :class="'log-' + log.type"
+            >
+              <span class="log-time">{{ log.timestamp }}</span>
+              <span class="log-message">{{ log.message }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="log-panel-tab" @click="toggleLogPanel">
+          <span class="tab-text">📜 記錄</span>
+        </div>
+      </div>
+
+      <!-- 卡片彈出動畫 -->
+      <transition name="popup-fade">
+        <div v-if="showPopup && popupCard" class="card-popup-overlay">
+          <div class="card-popup">
+            <div class="popup-action-label">{{ popupCard.action }}</div>
+            <img :src="popupCard.img_url" :alt="popupCard.name">
+            <h3>{{ popupCard.name }}</h3>
+          </div>
+        </div>
+      </transition>
 
       <!-- 遊戲資訊 -->
       <header class="game-header">
@@ -489,9 +617,10 @@ onMounted(() => {
         </div>
 
         <div class="field-layout opponent-layout">
+          
           <!-- 左側:戰鬥場 + 備戰區 (順序相反) -->
           <div class="left-side">
-            <!-- 戰鬥場 (在上) -->
+        <!-- 戰鬥場 (在上) -->
             <div class="battle-zone">
               <h4>戰鬥場</h4>
               <div 
@@ -910,6 +1039,12 @@ onMounted(() => {
             🏟️ 打出到競技場
           </button>
           <button 
+            @click="playSupporterCard"
+            class="action-btn primary"
+          >
+            👤 使用支援者卡
+          </button>
+          <button 
             @click="prepareStackCard"
             class="action-btn"
           >
@@ -1214,6 +1349,215 @@ onMounted(() => {
 .confirm-turn-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(72, 187, 120, 0.5);
+}
+
+/* ========== 操作記錄面板 ========== */
+.action-log-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  bottom: 20px;
+  width: 280px;
+  z-index: 90;
+  transition: all 0.3s ease;
+}
+
+.action-log-panel.collapsed {
+  width: 50px;
+}
+
+.log-panel-content {
+  background: rgba(26, 32, 44, 0.95);
+  border-radius: 12px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(251, 191, 36, 0.3);
+}
+
+.log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #fbbf24;
+}
+
+.toggle-btn {
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.log-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 191, 36, 0.5) rgba(255, 255, 255, 0.1);
+}
+
+.log-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-panel-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.log-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(251, 191, 36, 0.5);
+  border-radius: 3px;
+}
+
+.log-item {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid transparent;
+}
+
+.log-item.log-player {
+  border-left-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.log-item.log-opponent {
+  border-left-color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.log-item.log-system {
+  border-left-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.log-time {
+  display: block;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 2px;
+}
+
+.log-message {
+  display: block;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 收合狀態的標籤 */
+.log-panel-tab {
+  background: rgba(26, 32, 44, 0.95);
+  width: 50px;
+  height: 120px;
+  border-radius: 12px 0 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(251, 191, 36, 0.3);
+  border-right: none;
+  transition: all 0.2s;
+}
+
+.log-panel-tab:hover {
+  background: rgba(26, 32, 44, 1);
+  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.4);
+}
+
+.tab-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  color: #fbbf24;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+/* ========== 卡片彈出動畫 ========== */
+.card-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.card-popup {
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  max-width: 90%;
+  position: relative;
+}
+
+.popup-action-label {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: white;
+  padding: 8px 24px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+}
+
+.card-popup img {
+  width: 300px;
+  max-width: 100%;
+  border-radius: 12px;
+  margin-bottom: 15px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.card-popup h3 {
+  color: #1a365d;
+  margin: 0;
+  font-size: 24px;
+}
+
+.popup-fade-enter-active,
+.popup-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.popup-fade-enter-from,
+.popup-fade-leave-to {
+  opacity: 0;
 }
 
 /* ========== 遊戲資訊 ========== */
