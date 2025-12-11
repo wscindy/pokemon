@@ -1,8 +1,10 @@
 // src/services/api.js
 import axios from 'axios'
 
+
 // 從環境變數讀取 API 網址
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1'
+
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,6 +12,7 @@ const api = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
 
 // 卡片相關 API
 export const cardAPI = {
@@ -25,6 +28,7 @@ export const cardAPI = {
     return api.get(`/cards/${cardUniqueId}`)
   }
 }
+
 
 // 牌組相關 API
 export const deckAPI = {
@@ -49,6 +53,7 @@ export const deckAPI = {
   }
 }
 
+
 // 遊戲相關 API
 export const gameAPI = {
   // 初始化遊戲
@@ -56,26 +61,29 @@ export const gameAPI = {
     return api.post('/games/initialize')
   },
 
+
   // 發牌
   setupGame(gameStateId) {
     return api.post(`/games/${gameStateId}/setup`)
   },
+
 
   // 查詢遊戲狀態
   getGameState(gameStateId) {
     return api.get(`/games/${gameStateId}/state`)
   },
 
+
   // 抽牌
   drawCard(gameStateId) {
     return api.post(`/games/${gameStateId}/draw`)
   },
   
-  // 出牌到戰鬥場或備戰區
-  playCard(gameStateId, cardId, position) {
+  // 統一的出牌方法 (支援戰鬥場、備戰區、競技場)
+  playCard(gameStateId, cardId, zone) {
     return api.post(`/games/${gameStateId}/play_card`, {
       card_id: cardId,
-      position: position  // 'active' 或 'bench'
+      zone: zone  // 'active', 'bench', 'stadium'
     })
   },
   
@@ -87,6 +95,7 @@ export const gameAPI = {
     })
   },
 
+
   // 移動卡牌(完全自由)
   moveCard(gameStateId, cardId, toZone, toPosition = null) {
     return api.post(`/games/${gameStateId}/move_card`, {
@@ -96,6 +105,7 @@ export const gameAPI = {
     })
   },
 
+
   // 疊加卡牌(進化或其他)
   stackCard(gameStateId, cardId, targetCardId) {
     return api.post(`/games/${gameStateId}/stack_card`, {
@@ -104,6 +114,7 @@ export const gameAPI = {
     })
   },
 
+
   // 更新傷害值
   updateDamage(gameStateId, pokemonId, damageValue) {
     return api.post(`/games/${gameStateId}/update_damage`, {
@@ -111,6 +122,7 @@ export const gameAPI = {
       damage_taken: damageValue
     })
   },
+
 
   // 轉移能量卡(完全自由)
   transferEnergy(gameStateId, energyId, fromPokemonId, toPokemonId = null, toZone = null) {
@@ -122,10 +134,12 @@ export const gameAPI = {
     })
   },
 
+
   // 結束回合
   endTurn(gameStateId) {
     return api.post(`/games/${gameStateId}/end_turn`)
   },
+
 
   // 攻擊(保留原有)
   attack(gameStateId, attackerId, defenderId, attackIndex) {
@@ -136,12 +150,14 @@ export const gameAPI = {
     })
   },
 
-   // 從牌庫抽牌
+
+  // 從牌庫抽牌
   drawCards(gameStateId, count) {
     return api.post(`/games/${gameStateId}/draw_cards`, {
       count: count
     })
   },
+
 
   // 從棄牌堆撿牌
   pickFromDiscard(gameStateId, count) {
@@ -150,10 +166,21 @@ export const gameAPI = {
     })
   },
 
+
   // 領取獎勵卡
   takePrize(gameStateId) {
     return api.post(`/games/${gameStateId}/take_prize`)
+  },
+  
+  // 移動競技場卡
+  moveStadiumCard(gameStateId, stadiumCardId, targetPlayerId, targetZone) {
+    return api.post(`/games/${gameStateId}/move_stadium_card`, {
+      card_id: stadiumCardId,
+      player_id: targetPlayerId,
+      target_zone: targetZone  // 'hand', 'discard', 'deck'
+    })
   }
 }
+
 
 export default api

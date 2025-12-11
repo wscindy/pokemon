@@ -11,20 +11,22 @@ const error = ref(null)
 
 // 選中的卡片和操作模式
 const selectedCard = ref(null)
-const selectedMode = ref(null)  // 'hand_card', 'field_pokemon', 'energy_transfer', 'deck_operation'
+const selectedMode = ref(null)
 const selectedPokemonOnField = ref(null)
 const selectedEnergyCard = ref(null)
-const operationMode = ref(null)  // 'attach', 'stack', 'transfer_energy_target', 'select_bench_position'
+const operationMode = ref(null)
 const targetPokemon = ref(null)
 
 // 牌庫操作狀態
-const selectedDeckZone = ref(null)  // 'deck', 'discard', 'prize'
-const drawCount = ref(1)  // 預設抽1張
+const selectedDeckZone = ref(null)
+const drawCount = ref(1)
+
+// 選中的競技場卡
+const selectedStadiumCard = ref(null)
 
 // 排序後的手牌
 const sortedHandCards = computed(() => {
   if (!gameState.value?.hand) return []
-  
   return [...gameState.value.hand].sort((a, b) => {
     return a.card_unique_id.localeCompare(b.card_unique_id)
   })
@@ -32,82 +34,72 @@ const sortedHandCards = computed(() => {
 
 // ========== 按鈕禁用邏輯 ==========
 
-// 戰鬥場是否已有牌
 const isActiveSlotFilled = computed(() => {
   return gameState.value?.active_pokemon != null
 })
 
-// 備戰區是否已滿(5張)
 const isBenchFull = computed(() => {
   return gameState.value?.bench?.length >= 5
 })
 
-// 能否放到戰鬥場
 const canPlayToActive = computed(() => {
   if (!selectedCard.value) return false
-  // 只有寶可夢卡才能放到戰鬥場
   if (selectedCard.value.card_type !== 'Pokémon') return false
-  // 戰鬥場已有牌就不能放
   return !isActiveSlotFilled.value
 })
 
-// 能否放到備戰區
 const canPlayToBench = computed(() => {
   if (!selectedCard.value) return false
-  // 只有寶可夢卡才能放到備戰區
   if (selectedCard.value.card_type !== 'Pokémon') return false
-  // 備戰區滿了就不能放
   return !isBenchFull.value
 })
 
-// ✅ 新增:能否移動到戰鬥場(場上寶可夢)
 const canMoveToActive = computed(() => {
   if (!selectedPokemonOnField.value) return false
-  // 如果已經在戰鬥場,不能移動
   if (selectedPokemonOnField.value.zone === 'active') return false
-  // 如果戰鬥場已有其他牌,不能移動
   return !isActiveSlotFilled.value
 })
 
-// ========== 新增:取得要顯示的卡片 ==========
+// ========== 取得要顯示的卡片 ==========
 
-// 取得要顯示的卡片(最新疊加的,或原卡)
 const getDisplayCard = (pokemon) => {
   if (!pokemon) return null
   
-  // 如果有疊加卡片,顯示最新的那張
   if (pokemon.stacked_cards && pokemon.stacked_cards.length > 0) {
-    // stacked_cards 已經按 stack_order 降序排列,第一張就是最新的
     const latestCard = pokemon.stacked_cards[0]
     return {
       name: latestCard.name,
       img_url: latestCard.img_url,
-      hp: latestCard.hp || pokemon.hp,  // 如果後端沒傳 hp,用原卡的
+      hp: latestCard.hp || pokemon.hp,
       card_type: latestCard.card_type
     }
   }
   
-  // 沒有疊加,顯示原卡
   return pokemon
 }
 
-// 取得除了最新那張以外的所有疊加卡片
 const getStackedCardsExceptLatest = (pokemon) => {
   if (!pokemon.stacked_cards || pokemon.stacked_cards.length === 0) {
     return []
   }
-  
-  // 跳過第一張(最新的),返回其他的
   return pokemon.stacked_cards.slice(1)
 }
 
-// 載入遊戲狀態
+// ========== 載入遊戲狀態 ==========
+
 const loadGameState = async () => {
   try {
+    loading.value = true
     const response = await gameAPI.getGameState(gameStateId.value)
-    gameState.value = response.data
+    
+    gameState.value = {
+      ...response.data,
+      stadium_cards: response.data.stadium_cards || []
+    }
+    
+    console.log('✅ 載入成功')
   } catch (err) {
-    console.error('載入遊戲狀態失敗:', err)
+    console.error('❌ 載入遊戲狀態失敗:', err)
     error.value = err.message
   } finally {
     loading.value = false
@@ -116,17 +108,16 @@ const loadGameState = async () => {
 
 // ========== 手牌操作 ==========
 
-// 點擊手牌
 const handleCardClick = (card) => {
   selectedCard.value = card
   selectedMode.value = 'hand_card'
   operationMode.value = null
   selectedPokemonOnField.value = null
+  selectedStadiumCard.value = null
   
   console.log('選中卡片:', card.name)
 }
 
-// 出牌到戰鬥場
 const playToActive = async () => {
   if (!selectedCard.value || !canPlayToActive.value) return
   
@@ -140,7 +131,6 @@ const playToActive = async () => {
   }
 }
 
-// 出牌到備戰區
 const playToBench = async () => {
   if (!selectedCard.value || !canPlayToBench.value) return
   
@@ -154,14 +144,29 @@ const playToBench = async () => {
   }
 }
 
-// 準備附加能量
+const playStadiumCard = async () => {
+  if (!selectedCard.value) return
+  
+  try {
+    console.log('🏟️ 打出競技場卡:', selectedCard.value.name)
+    const response = await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'stadium')
+    console.log('✅ 後端回應:', response.data)
+    
+    await loadGameState()
+    cancelSelection()
+    alert('競技場卡已打出!')
+  } catch (err) {
+    console.error('❌ 打出失敗:', err)
+    alert('打出失敗: ' + (err.response?.data?.error || err.message))
+  }
+}
+
 const prepareAttachEnergy = () => {
   if (!selectedCard.value) return
   operationMode.value = 'attach'
   console.log('請選擇目標寶可夢')
 }
 
-// 準備疊加卡片
 const prepareStackCard = () => {
   if (!selectedCard.value) return
   operationMode.value = 'stack'
@@ -170,33 +175,27 @@ const prepareStackCard = () => {
 
 // ========== 場上寶可夢操作 ==========
 
-// 點擊場上的寶可夢
 const handleFieldPokemonClick = (pokemon) => {
-  // 如果是附加能量模式
   if (operationMode.value === 'attach') {
     attachEnergyToPokemon(selectedCard.value, pokemon)
     return
   }
   
-  // 如果是疊加模式
   if (operationMode.value === 'stack') {
     stackCardOnPokemon(selectedCard.value, pokemon)
     return
   }
   
-  // 如果是轉移能量模式
   if (operationMode.value === 'transfer_energy_target') {
     transferEnergyToPokemon(selectedEnergyCard.value, pokemon)
     return
   }
   
-  // 一般模式:選中並顯示操作選單
   selectedPokemonOnField.value = pokemon
   selectedMode.value = 'field_pokemon'
   operationMode.value = null
 }
 
-// 附加能量到寶可夢
 const attachEnergyToPokemon = async (energyCard, pokemon) => {
   try {
     await gameAPI.attachEnergy(
@@ -212,7 +211,6 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
   }
 }
 
-// 疊加卡片到寶可夢
 const stackCardOnPokemon = async (card, targetPokemon) => {
   try {
     await gameAPI.stackCard(gameStateId.value, card.id, targetPokemon.id)
@@ -224,7 +222,6 @@ const stackCardOnPokemon = async (card, targetPokemon) => {
   }
 }
 
-// 移動卡片到指定區域
 const moveCardTo = async (card, toZone, toPosition = null) => {
   try {
     await gameAPI.moveCard(gameStateId.value, card.id, toZone, toPosition)
@@ -244,9 +241,51 @@ const moveCardTo = async (card, toZone, toPosition = null) => {
   }
 }
 
+const handleStadiumCardClick = (stadiumCard) => {
+  selectedStadiumCard.value = stadiumCard
+  selectedMode.value = 'stadium_card'
+  operationMode.value = null
+  console.log('選中競技場卡:', stadiumCard.name)
+}
+
+const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
+  if (!selectedStadiumCard.value) return
+  
+  try {
+    const playerId = targetPlayerId || gameState.value.current_player_id
+    
+    console.log('🔄 移動競技場卡:', {
+      cardId: selectedStadiumCard.value.id,
+      playerId,
+      targetZone
+    })
+    
+    const response = await gameAPI.moveStadiumCard(
+      gameStateId.value,
+      selectedStadiumCard.value.id,
+      playerId,
+      targetZone
+    )
+    console.log('✅ 移動成功:', response.data)
+    
+    await loadGameState()
+    cancelSelection()
+    
+    const zoneNames = {
+      'hand': '手牌',
+      'discard': '棄牌堆',
+      'deck': '牌庫'
+    }
+    const playerName = playerId === gameState.value.current_player_id ? '你的' : '對手的'
+    alert(`已移至${playerName}${zoneNames[targetZone]}`)
+  } catch (err) {
+    console.error('❌ 移動失敗:', err)
+    alert('移動失敗: ' + (err.response?.data?.error || err.message))
+  }
+}
+
 // ========== 傷害操作 ==========
 
-// 傷害調整 (+10 / -10)
 const adjustDamage = async (pokemon, amount) => {
   const newDamage = Math.max(0, pokemon.damage_taken + amount)
   try {
@@ -257,7 +296,6 @@ const adjustDamage = async (pokemon, amount) => {
   }
 }
 
-// 直接輸入傷害值
 const updateDamage = async (pokemon) => {
   try {
     await gameAPI.updateDamage(gameStateId.value, pokemon.id, pokemon.damage_taken)
@@ -269,14 +307,12 @@ const updateDamage = async (pokemon) => {
 
 // ========== 能量卡操作 ==========
 
-// 點擊能量卡(準備轉移)
 const selectEnergyForTransfer = (energy, fromPokemon) => {
   selectedEnergyCard.value = { ...energy, fromPokemon }
   selectedMode.value = 'energy_transfer'
   operationMode.value = null
 }
 
-// 轉移能量到寶可夢
 const transferEnergyToPokemon = async (energyData, toPokemon) => {
   try {
     await gameAPI.transferEnergy(
@@ -294,7 +330,6 @@ const transferEnergyToPokemon = async (energyData, toPokemon) => {
   }
 }
 
-// 移動能量到其他區域
 const moveEnergyTo = async (energyData, toZone) => {
   try {
     await gameAPI.transferEnergy(
@@ -320,27 +355,23 @@ const moveEnergyTo = async (energyData, toZone) => {
 
 // ========== 牌庫操作 ==========
 
-// 點擊牌庫
 const handleDeckClick = () => {
   selectedDeckZone.value = 'deck'
   selectedMode.value = 'deck_operation'
   drawCount.value = 1
 }
 
-// 點擊棄牌堆
 const handleDiscardClick = () => {
   selectedDeckZone.value = 'discard'
   selectedMode.value = 'deck_operation'
   drawCount.value = 1
 }
 
-// 點擊獎勵卡
 const handlePrizeClick = () => {
   selectedDeckZone.value = 'prize'
   selectedMode.value = 'deck_operation'
 }
 
-// 從牌庫抽牌
 const drawFromDeck = async () => {
   try {
     const response = await gameAPI.drawCards(gameStateId.value, drawCount.value)
@@ -352,19 +383,24 @@ const drawFromDeck = async () => {
   }
 }
 
-// 從棄牌堆撿牌
 const pickFromDiscard = async () => {
   try {
+    console.log('🔍 發送請求 - drawCount:', drawCount.value)
+    
     const response = await gameAPI.pickFromDiscard(gameStateId.value, drawCount.value)
+    
     await loadGameState()
     cancelSelection()
-    alert(response.data.message)
+    
+    const actualCount = response.data.picked_cards?.length || 0
+    alert(`從棄牌堆撿了 ${actualCount} 張牌`)
+    
   } catch (err) {
-    alert('撿牌失敗: ' + (err.response?.data?.error || err.message))
+    console.error('🔍 錯誤:', err)
+    alert(err.response?.data?.error || err.message)
   }
 }
 
-// 領取獎勵卡
 const takePrizeCard = async () => {
   try {
     const response = await gameAPI.takePrize(gameStateId.value)
@@ -378,7 +414,6 @@ const takePrizeCard = async () => {
 
 // ========== 回合管理 ==========
 
-// 結束回合
 const confirmTurn = async () => {
   try {
     await gameAPI.endTurn(gameStateId.value)
@@ -391,7 +426,6 @@ const confirmTurn = async () => {
 
 // ========== 通用操作 ==========
 
-// 取消選擇
 const cancelSelection = () => {
   selectedCard.value = null
   selectedMode.value = null
@@ -400,6 +434,7 @@ const cancelSelection = () => {
   selectedEnergyCard.value = null
   targetPokemon.value = null
   selectedDeckZone.value = null
+  selectedStadiumCard.value = null
   drawCount.value = 1
 }
 
@@ -432,42 +467,201 @@ onMounted(() => {
       <header class="game-header">
         <div class="game-info">
           <h2>遊戲 #{{ gameStateId }}</h2>
-          <p>回合: {{ gameState.round_number }}</p>
-        </div>
-        <div class="stats">
-          <div class="stat-item">
-            <span class="stat-label">牌庫</span>
-            <span class="stat-value">{{ gameState.deck_count }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">獎勵卡</span>
-            <span class="stat-value">{{ gameState.prize_count }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">棄牌堆</span>
-            <span class="stat-value">{{ gameState.discard_count }}</span>
-          </div>
+          <p>回合: {{ gameState.round_number || 0 }}</p>
         </div>
       </header>
 
-      <!-- 對手區域 -->
+      <!-- 對手區域 (鏡像 - 上下顛倒) -->
       <section class="opponent-area">
-        <h3>對手</h3>
-        <div class="pokemon-area">
-          <div class="active-slot empty-slot">
-            <p>戰鬥場</p>
-          </div>
-          <div class="bench-slots">
-            <div class="bench-slot empty-slot" v-for="i in 5" :key="i">
-              <p>備戰 {{ i }}</p>
+        <h3>🔴 對手</h3>
+        
+        <!-- 對手手牌 (在最上方，顯示卡背) -->
+        <div class="opponent-hand-zone">
+          <h4>手牌 ({{ sortedHandCards.length }})</h4>
+          <div class="opponent-hand-cards">
+            <div 
+              v-for="(card, index) in sortedHandCards" 
+              :key="'opp-hand-' + index"
+              class="card-back"
+            >
             </div>
+          </div>
+        </div>
+
+        <div class="field-layout opponent-layout">
+          <!-- 左側:戰鬥場 + 備戰區 (順序相反) -->
+          <div class="left-side">
+            <!-- 戰鬥場 (在上) -->
+            <div class="battle-zone">
+              <h4>戰鬥場</h4>
+              <div 
+                v-if="gameState.active_pokemon" 
+                class="pokemon-card opponent-card"
+              >
+                <img :src="getDisplayCard(gameState.active_pokemon).img_url" :alt="getDisplayCard(gameState.active_pokemon).name">
+                <p class="pokemon-name">{{ getDisplayCard(gameState.active_pokemon).name }}</p>
+                <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.active_pokemon).hp }}</p>
+                
+                <!-- 傷害顯示 -->
+                <div class="damage-display">
+                  傷害: {{ gameState.active_pokemon.damage_taken }}
+                </div>
+                
+                <!-- 附加的能量卡 -->
+                <div v-if="gameState.active_pokemon.attached_energies?.length > 0" class="energy-container">
+                  <div 
+                    v-for="energy in gameState.active_pokemon.attached_energies" 
+                    :key="'opp-energy-' + energy.id"
+                    class="energy-mini"
+                    :title="energy.name"
+                  >
+                    <img :src="energy.img_url" :alt="energy.name">
+                  </div>
+                </div>
+
+                <!-- 疊加的卡片 -->
+                <div v-if="gameState.active_pokemon.stacked_cards?.length > 0" class="stacked-cards-container">
+                  <div 
+                    class="stacked-mini-card"
+                    :title="gameState.active_pokemon.name"
+                  >
+                    <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
+                  </div>
+                  
+                  <div 
+                    v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)" 
+                    :key="'opp-stack-' + card.id"
+                    class="stacked-mini-card"
+                    :title="card.name"
+                  >
+                    <img :src="card.img_url" :alt="card.name">
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-slot">
+                無寶可夢
+              </div>
+            </div>
+            <!-- 備戰區 (在下) -->
+            <div class="bench-zone">
+              <h4>備戰區</h4>
+              <div class="bench-grid">
+                <div 
+                  v-for="pokemon in (gameState.bench || [])" 
+                  :key="'opp-bench-' + pokemon.id"
+                  class="pokemon-card small opponent-card"
+                >
+                  <img :src="getDisplayCard(pokemon).img_url" :alt="getDisplayCard(pokemon).name">
+                  <p class="pokemon-name">{{ getDisplayCard(pokemon).name }}</p>
+                  <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ getDisplayCard(pokemon).hp }}</p>
+                  
+                  <!-- 傷害顯示(小版) -->
+                  <div class="damage-display-small">
+                    傷害: {{ pokemon.damage_taken }}
+                  </div>
+                  
+                  <!-- 附加的能量卡 -->
+                  <div v-if="pokemon.attached_energies?.length > 0" class="energy-container-small">
+                    <div 
+                      v-for="energy in pokemon.attached_energies" 
+                      :key="'opp-bench-energy-' + energy.id"
+                      class="energy-mini-small"
+                      :title="energy.name"
+                    >
+                      <img :src="energy.img_url" :alt="energy.name">
+                    </div>
+                  </div>
+
+                  <!-- 疊加的卡片(小版) -->
+                  <div v-if="pokemon.stacked_cards?.length > 0" class="stacked-cards-container-small">
+                    <div class="stacked-mini-card-small" :title="pokemon.name">
+                      <img :src="pokemon.img_url" :alt="pokemon.name">
+                    </div>
+                    <div 
+                      v-for="card in getStackedCardsExceptLatest(pokemon)" 
+                      :key="'opp-bench-stack-' + card.id"
+                      class="stacked-mini-card-small"
+                      :title="card.name"
+                    >
+                      <img :src="card.img_url" :alt="card.name">
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 空位 -->
+                <div 
+                  v-for="i in (5 - (gameState.bench?.length || 0))" 
+                  :key="'opp-empty-' + i"
+                  class="empty-slot small"
+                >
+                  空位 {{ (gameState.bench?.length || 0) + i }}
+                </div>
+              </div>
+            </div>
+
+
+          </div>
+
+          <!-- 右側:牌庫 + 棄牌堆 + 獎勵卡 (順序相反) -->
+          <div class="right-side opponent-right">
+            <div class="deck-area">
+              <!-- 牌庫 -->
+              <div class="deck-item">
+                <h4>牌庫</h4>
+                <div class="deck-stack">
+                  <span class="deck-count">{{ gameState.deck_count || 0 }}</span>
+                </div>
+              </div>
+              
+              <!-- 棄牌堆 -->
+              <div class="deck-item">
+                <h4>棄牌堆</h4>
+                <div class="deck-stack discard">
+                  <span class="deck-count">{{ gameState.discard_count || 0 }}</span>
+                </div>
+              </div>
+              
+              <!-- 獎勵卡 -->
+              <div class="deck-item">
+                <h4>獎勵卡</h4>
+                <div class="deck-stack prize">
+                  <span class="deck-count">{{ gameState.prize_count || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 競技場卡區域 -->
+      <section class="stadium-area">
+        <h3>🏟️ 競技場</h3>
+        <div class="stadium-cards-container">
+          <template v-if="gameState.stadium_cards && Array.isArray(gameState.stadium_cards) && gameState.stadium_cards.length > 0">
+            <div 
+              v-for="(stadiumCard, index) in gameState.stadium_cards" 
+              :key="stadiumCard.id || index"
+              class="stadium-card"
+              @click="handleStadiumCardClick(stadiumCard)"
+            >
+              <img 
+                :src="stadiumCard.img_url || 'https://via.placeholder.com/150x210?text=No+Image'" 
+                :alt="stadiumCard.name || '未知卡片'"
+              >
+              <p class="stadium-card-name">{{ stadiumCard.name || '未知' }}</p>
+              <p class="stadium-card-owner">{{ stadiumCard.owner_name || '未知玩家' }}</p>
+            </div>
+          </template>
+          
+          <div v-else class="empty-stadium">
+            尚無競技場卡
           </div>
         </div>
       </section>
 
       <!-- 玩家區域 -->
       <section class="player-area">
-        <h3>你的場地</h3>
+        <h3>🔵 你的場地</h3>
         
         <div class="field-layout">
           <!-- 左側:戰鬥場 + 備戰區 -->
@@ -483,7 +677,6 @@ onMounted(() => {
                 }"
                 @click="handleFieldPokemonClick(gameState.active_pokemon)"
               >
-                <!-- ✅ 顯示最新疊加的卡片 -->
                 <img :src="getDisplayCard(gameState.active_pokemon).img_url" :alt="getDisplayCard(gameState.active_pokemon).name">
                 <p class="pokemon-name">{{ getDisplayCard(gameState.active_pokemon).name }}</p>
                 <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.active_pokemon).hp }}</p>
@@ -515,9 +708,8 @@ onMounted(() => {
                   </div>
                 </div>
 
-                <!-- ✅ 疊加的卡片:顯示原卡和被壓住的卡片 -->
+                <!-- 疊加的卡片 -->
                 <div v-if="gameState.active_pokemon.stacked_cards?.length > 0" class="stacked-cards-container">
-                  <!-- 顯示原本的基礎卡片 -->
                   <div 
                     class="stacked-mini-card"
                     :title="gameState.active_pokemon.name"
@@ -525,7 +717,6 @@ onMounted(() => {
                     <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
                   </div>
                   
-                  <!-- 顯示其他被壓住的進化卡(除了最新的) -->
                   <div 
                     v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)" 
                     :key="card.id"
@@ -546,7 +737,7 @@ onMounted(() => {
               <h4>備戰區</h4>
               <div class="bench-grid">
                 <div 
-                  v-for="pokemon in gameState.bench" 
+                  v-for="pokemon in (gameState.bench || [])" 
                   :key="pokemon.id"
                   class="pokemon-card small"
                   :class="{ 
@@ -554,7 +745,6 @@ onMounted(() => {
                   }"
                   @click="handleFieldPokemonClick(pokemon)"
                 >
-                  <!-- ✅ 顯示最新疊加的卡片 -->
                   <img :src="getDisplayCard(pokemon).img_url" :alt="getDisplayCard(pokemon).name">
                   <p class="pokemon-name">{{ getDisplayCard(pokemon).name }}</p>
                   <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ getDisplayCard(pokemon).hp }}</p>
@@ -586,13 +776,11 @@ onMounted(() => {
                     </div>
                   </div>
 
-                  <!-- ✅ 疊加的卡片(小版) -->
+                  <!-- 疊加的卡片(小版) -->
                   <div v-if="pokemon.stacked_cards?.length > 0" class="stacked-cards-container-small">
-                    <!-- 原本的基礎卡片 -->
                     <div class="stacked-mini-card-small" :title="pokemon.name">
                       <img :src="pokemon.img_url" :alt="pokemon.name">
                     </div>
-                    <!-- 其他被壓住的卡片 -->
                     <div 
                       v-for="card in getStackedCardsExceptLatest(pokemon)" 
                       :key="card.id"
@@ -606,11 +794,11 @@ onMounted(() => {
                 
                 <!-- 空位 -->
                 <div 
-                  v-for="i in (5 - gameState.bench.length)" 
+                  v-for="i in (5 - (gameState.bench?.length || 0))" 
                   :key="'empty-' + i"
                   class="empty-slot small"
                 >
-                  空位 {{ gameState.bench.length + i }}
+                  空位 {{ (gameState.bench?.length || 0) + i }}
                 </div>
               </div>
             </div>
@@ -624,10 +812,10 @@ onMounted(() => {
                 <h4>獎勵卡</h4>
                 <div 
                   class="deck-stack prize"
-                  :class="{ 'clickable': gameState.prize_count > 0 }"
-                  @click="gameState.prize_count > 0 && handlePrizeClick()"
+                  :class="{ 'clickable': (gameState.prize_count || 0) > 0 }"
+                  @click="(gameState.prize_count || 0) > 0 && handlePrizeClick()"
                 >
-                  <span class="deck-count">{{ gameState.prize_count }}</span>
+                  <span class="deck-count">{{ gameState.prize_count || 0 }}</span>
                 </div>
               </div>
               
@@ -636,10 +824,10 @@ onMounted(() => {
                 <h4>棄牌堆</h4>
                 <div 
                   class="deck-stack discard"
-                  :class="{ 'clickable': gameState.discard_count > 0 }"
-                  @click="gameState.discard_count > 0 && handleDiscardClick()"
+                  :class="{ 'clickable': (gameState.discard_count || 0) > 0 }"
+                  @click="(gameState.discard_count || 0) > 0 && handleDiscardClick()"
                 >
-                  <span class="deck-count">{{ gameState.discard_count }}</span>
+                  <span class="deck-count">{{ gameState.discard_count || 0 }}</span>
                 </div>
               </div>
               
@@ -648,10 +836,10 @@ onMounted(() => {
                 <h4>牌庫</h4>
                 <div 
                   class="deck-stack"
-                  :class="{ 'clickable': gameState.deck_count > 0 }"
-                  @click="gameState.deck_count > 0 && handleDeckClick()"
+                  :class="{ 'clickable': (gameState.deck_count || 0) > 0 }"
+                  @click="(gameState.deck_count || 0) > 0 && handleDeckClick()"
                 >
-                  <span class="deck-count">{{ gameState.deck_count }}</span>
+                  <span class="deck-count">{{ gameState.deck_count || 0 }}</span>
                 </div>
               </div>
             </div>
@@ -714,6 +902,12 @@ onMounted(() => {
             class="action-btn primary"
           >
             附加能量
+          </button>
+          <button 
+            @click="playStadiumCard"
+            class="action-btn primary"
+          >
+            🏟️ 打出到競技場
           </button>
           <button 
             @click="prepareStackCard"
@@ -787,6 +981,59 @@ onMounted(() => {
           >
             移到備戰區
           </button>
+          <button @click="cancelSelection" class="action-btn cancel">
+            取消
+          </button>
+        </div>
+      </div>
+
+      <!-- 操作選單:競技場卡 -->
+      <div v-if="selectedMode === 'stadium_card' && selectedStadiumCard" class="action-menu">
+        <div class="action-menu-header">
+          <h3>{{ selectedStadiumCard.name || '未知卡片' }}</h3>
+          <button @click="cancelSelection" class="close-btn">✕</button>
+        </div>
+        <div class="action-buttons">
+          <button 
+            @click="moveStadiumCardTo('hand')"
+            class="action-btn"
+          >
+            📥 移到我的手牌
+          </button>
+          <button 
+            @click="moveStadiumCardTo('discard')"
+            class="action-btn"
+          >
+            🗑️ 移到我的棄牌堆
+          </button>
+          <button 
+            @click="moveStadiumCardTo('deck')"
+            class="action-btn"
+          >
+            📚 移回我的牌庫
+          </button>
+          
+          <template v-if="gameState.opponent_id">
+            <button 
+              @click="moveStadiumCardTo('hand', gameState.opponent_id)"
+              class="action-btn"
+            >
+              📤 移到對手的手牌
+            </button>
+            <button 
+              @click="moveStadiumCardTo('discard', gameState.opponent_id)"
+              class="action-btn"
+            >
+              🗑️ 移到對手的棄牌堆
+            </button>
+            <button 
+              @click="moveStadiumCardTo('deck', gameState.opponent_id)"
+              class="action-btn"
+            >
+              📚 移回對手的牌庫
+            </button>
+          </template>
+          
           <button @click="cancelSelection" class="action-btn cancel">
             取消
           </button>
@@ -916,6 +1163,7 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
+/* ========== 主要背景 (深藍色) ========== */
 .game-board {
   min-height: 100vh;
   background: linear-gradient(180deg, #1a365d 0%, #2d3748 100%);
@@ -979,39 +1227,200 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
-.stats {
-  display: flex;
-  gap: 30px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stat-label {
-  font-size: 14px;
-  opacity: 0.8;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #fbbf24;
-}
-
-/* ========== 對手/玩家區域 ========== */
-.opponent-area,
-.player-area {
-  background: rgba(255, 255, 255, 0.05);
+/* ========== 對手區域 ========== */
+.opponent-area {
+  background: rgba(220, 53, 69, 0.15);
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 20px;
-  width: 100%;
+  border: 3px solid rgba(220, 53, 69, 0.4);
 }
 
-/* ========== 場地佈局 ========== */
+.opponent-area h3 {
+  color: #ff6b6b;
+  margin-bottom: 15px;
+  text-align: center;
+  font-size: 20px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* 對手區域特殊佈局 (鏡像) */
+.opponent-layout {
+  flex-direction: row;
+}
+
+.opponent-layout .left-side {
+  flex-direction: column-reverse;
+}
+
+.opponent-right .deck-area {
+  flex-direction: column-reverse;
+}
+
+/* 對手手牌區 (在最上方) */
+.opponent-hand-zone {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.opponent-hand-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 10px 0;
+  -webkit-overflow-scrolling: touch;
+  justify-content: center;
+}
+
+.card-back {
+  width: 140px;
+  height: 196px;
+  background: linear-gradient(135deg, #2b5797 0%, #1e3a8a 100%);
+  border: 3px solid #3b82f6;
+  border-radius: 12px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.card-back::after {
+  content: '?';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 64px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: bold;
+}
+
+/* 對手的卡片不能點擊 */
+.opponent-card {
+  cursor: default !important;
+  pointer-events: none;
+}
+
+/* 對手的傷害顯示 (不可編輯) */
+.damage-display {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f7fafc;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: bold;
+  color: #e53e3e;
+  font-size: 14px;
+}
+
+.damage-display-small {
+  margin-top: 5px;
+  padding: 5px;
+  background: #f7fafc;
+  border-radius: 4px;
+  text-align: center;
+  font-weight: bold;
+  color: #e53e3e;
+  font-size: 11px;
+}
+
+/* ========== 競技場卡區域 ========== */
+.stadium-area {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 2px solid rgba(251, 191, 36, 0.3);
+}
+
+.stadium-area h3 {
+  color: #fbbf24;
+  margin-bottom: 15px;
+  font-size: 20px;
+  text-align: center;
+}
+
+.stadium-cards-container {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto;
+  padding: 10px;
+  min-height: 200px;
+  align-items: center;
+  justify-content: flex-start;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stadium-card {
+  background: white;
+  color: black;
+  padding: 12px;
+  border-radius: 10px;
+  width: 150px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 3px solid transparent;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.stadium-card:hover {
+  transform: translateY(-10px) scale(1.05);
+  border-color: #fbbf24;
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.4);
+}
+
+.stadium-card img {
+  width: 100%;
+  height: 210px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.stadium-card-name {
+  font-weight: bold;
+  font-size: 13px;
+  margin-bottom: 4px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stadium-card-owner {
+  font-size: 11px;
+  color: #666;
+  text-align: center;
+}
+
+.empty-stadium {
+  width: 100%;
+  text-align: center;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+}
+
+/* ========== 玩家區域 ========== */
+.player-area {
+  background: rgba(59, 130, 246, 0.15);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 3px solid rgba(59, 130, 246, 0.4);
+}
+
+.player-area h3 {
+  color: #60a5fa;
+  margin-bottom: 15px;
+  text-align: center;
+  font-size: 20px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
 .field-layout {
   display: flex;
   gap: 20px;
@@ -1033,12 +1442,18 @@ onMounted(() => {
 /* ========== 戰鬥場 ========== */
 .battle-zone {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 h4 {
   margin-bottom: 15px;
   font-size: 18px;
   color: #fbbf24;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  width: 100%;
 }
 
 .pokemon-card {
@@ -1163,15 +1578,6 @@ h4 {
   border-top: 1px solid #e2e8f0;
 }
 
-.stacked-label {
-  width: 100%;
-  font-size: 11px;
-  color: #718096;
-  margin-bottom: 6px;
-  font-weight: bold;
-  text-align: left;
-}
-
 .stacked-cards-container > div:not(.stacked-label) {
   display: inline-block;
   margin-right: 4px;
@@ -1229,7 +1635,6 @@ h4 {
   margin: 5px 0;
 }
 
-/* 傷害控制(小版) */
 .damage-controls-small {
   display: flex;
   gap: 3px;
@@ -1241,15 +1646,15 @@ h4 {
 }
 
 .damage-btn-small {
-  width: 22px;
+  width: 25px;
   height: 22px;
   background: #4299e1;
   color: white;
   border: none;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 12px;
   font-weight: bold;
+  font-size: 12px;
 }
 
 .damage-input-small {
@@ -1258,35 +1663,32 @@ h4 {
   border: 1px solid #cbd5e0;
   border-radius: 3px;
   padding: 2px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
-/* 能量卡容器(小版) */
 .energy-container-small {
   display: flex;
   gap: 3px;
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
   border-top: 1px solid #e2e8f0;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .energy-mini-small {
-  width: 28px;
-  height: 39px;
+  width: 30px;
+  height: 42px;
   border-radius: 3px;
   overflow: hidden;
   border: 1px solid #cbd5e0;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: transform 0.2s;
 }
 
 .energy-mini-small:hover {
-  transform: scale(2.5);
+  transform: scale(1.5);
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.5);
 }
 
 .energy-mini-small img {
@@ -1296,21 +1698,15 @@ h4 {
   margin: 0;
 }
 
-/* 疊加卡片容器(小版) */
 .stacked-cards-container-small {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
   border-top: 1px solid #e2e8f0;
 }
 
-.stacked-cards-container-small > div {
-  display: inline-block;
-  margin-right: 3px;
-}
-
 .stacked-mini-card-small {
-  width: 30px;
-  height: 42px;
+  width: 35px;
+  height: 49px;
   border-radius: 3px;
   overflow: hidden;
   border: 1px solid #cbd5e0;
@@ -1318,15 +1714,13 @@ h4 {
   transition: all 0.2s;
   cursor: help;
   display: inline-block;
-  vertical-align: top;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin-right: 3px;
 }
 
 .stacked-mini-card-small:hover {
   opacity: 1;
-  transform: scale(3);
+  transform: scale(2);
   z-index: 999;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .stacked-mini-card-small img {
@@ -1335,33 +1729,49 @@ h4 {
   object-fit: cover;
 }
 
-/* ========== 右側牌堆區 ========== */
+.empty-slot {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  width: 220px;
+  min-height: 300px;
+}
+
+.empty-slot.small {
+  width: 100%;
+  min-height: 200px;
+  font-size: 12px;
+}
+
+/* ========== 牌庫區域 ========== */
 .deck-area {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 20px;
 }
 
 .deck-item {
   text-align: center;
 }
 
-.deck-item h4 {
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
 .deck-stack {
-  width: 100%;
-  height: 120px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 140px;
+  height: 196px;
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  border: 3px solid #4a5568;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   position: relative;
-  transition: transform 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+  margin: 0 auto;
 }
 
 .deck-stack.clickable {
@@ -1369,64 +1779,47 @@ h4 {
 }
 
 .deck-stack.clickable:hover {
-  transform: scale(1.1);
+  transform: translateY(-5px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .deck-stack.discard {
-  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+  background: linear-gradient(135deg, #742a2a 0%, #c53030 100%);
+  border-color: #e53e3e;
 }
 
 .deck-stack.prize {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #975a16 0%, #dd6b20 100%);
+  border-color: #ed8936;
 }
 
 .deck-count {
-  font-size: 36px;
+  font-size: 48px;
   font-weight: bold;
   color: white;
-}
-
-/* ========== 空位 ========== */
-.empty-slot {
-  border: 2px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100px;
-  opacity: 0.5;
-  text-align: center;
-}
-
-.empty-slot.small {
-  min-height: 80px;
-  padding: 10px;
-  font-size: 12px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* ========== 手牌區 ========== */
 .hand-zone {
   margin-top: 30px;
-  width: 100%;
+  padding-top: 20px;
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
 }
 
 .hand-cards {
   display: flex;
-  gap: 15px;
+  gap: 10px;
   overflow-x: auto;
   padding: 10px 0;
-  width: 100%;
   -webkit-overflow-scrolling: touch;
 }
 
 .hand-card {
   background: white;
-  color: black;
-  padding: 12px;
-  border-radius: 10px;
-  width: 150px;
+  border-radius: 12px;
+  padding: 10px;
+  width: 140px;
   flex-shrink: 0;
   cursor: pointer;
   transition: all 0.2s;
@@ -1440,24 +1833,22 @@ h4 {
 
 .hand-card.selected {
   border-color: #fbbf24;
-  transform: translateY(-15px);
-  box-shadow: 0 12px 24px rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
 }
 
 .hand-card img {
   width: 100%;
-  height: 210px;
-  object-fit: cover;
   border-radius: 8px;
   margin-bottom: 8px;
 }
 
 .card-info {
-  font-size: 12px;
+  color: black;
 }
 
 .card-name {
   font-weight: bold;
+  font-size: 12px;
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1465,33 +1856,36 @@ h4 {
 }
 
 .card-type {
+  font-size: 10px;
   color: #666;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .card-hp {
+  font-size: 10px;
   color: #e53e3e;
   font-weight: bold;
-  margin-bottom: 4px;
 }
 
 .card-stage {
+  font-size: 10px;
   color: #4299e1;
-  font-size: 11px;
 }
 
 /* ========== 操作選單 ========== */
 .action-menu {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  color: black;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 32, 44, 0.98);
   padding: 20px;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 1000;
-  max-width: 100vw;
+  min-width: 400px;
+  max-width: 90vw;
+  border: 2px solid rgba(251, 191, 36, 0.5);
 }
 
 .action-menu-header {
@@ -1499,123 +1893,118 @@ h4 {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
 }
 
 .action-menu-header h3 {
+  color: #fbbf24;
   margin: 0;
-  color: #2d3748;
+  font-size: 18px;
 }
 
 .close-btn {
-  background: none;
+  width: 30px;
+  height: 30px;
+  background: #e53e3e;
+  color: white;
   border: none;
-  font-size: 24px;
+  border-radius: 50%;
   cursor: pointer;
-  color: #718096;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
 .close-btn:hover {
-  color: #2d3748;
+  background: #c53030;
+  transform: rotate(90deg);
 }
 
 .action-buttons {
   display: flex;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
 .action-btn {
-  flex: 1;
-  min-width: 150px;
-  padding: 12px 20px;
-  border: 2px solid #e2e8f0;
+  padding: 10px 20px;
+  background: #4a5568;
+  color: white;
+  border: none;
   border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
   cursor: pointer;
+  font-size: 14px;
   transition: all 0.2s;
-  background: white;
-  color: #2d3748;
+  flex: 1;
+  min-width: 120px;
 }
 
-.action-btn:hover:not(:disabled):not(.disabled) {
-  background: #f7fafc;
+.action-btn:hover {
+  background: #2d3748;
   transform: translateY(-2px);
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
 }
 
-.action-btn.primary:hover:not(:disabled):not(.disabled) {
-  background: linear-gradient(135deg, #8B9EF5 0%, #9370C7 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.action-btn.primary:active:not(:disabled):not(.disabled) {
-  background: linear-gradient(135deg, #5A6FD8 0%, #644394 100%);
-  transform: translateY(0);
-}
-
-/* 禁用按鈕樣式 */
-.action-btn:disabled,
-.action-btn.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  background: #e2e8f0;
-  color: #a0aec0;
-  transform: none !important;
-}
-
-.action-btn.primary:disabled,
-.action-btn.primary.disabled {
-  background: #cbd5e0;
-  color: #718096;
+.action-btn.primary:hover {
+  background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
 }
 
 .action-btn.cancel {
-  background: #fed7d7;
-  color: #c53030;
-  border-color: #fc8181;
+  background: #718096;
+}
+
+.action-btn.cancel:hover {
+  background: #4a5568;
+}
+
+.action-btn.disabled {
+  background: #2d3748;
+  color: #718096;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-btn.disabled:hover {
+  transform: none;
 }
 
 .hint {
   margin-top: 15px;
   padding: 10px;
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 8px;
-  text-align: center;
-  font-weight: 600;
+  background: rgba(66, 153, 225, 0.2);
+  border-left: 4px solid #4299e1;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #90cdf4;
 }
 
-/* ========== 牌庫操作選單 ========== */
 .action-content {
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
 }
 
 .draw-count-selector {
-  margin-bottom: 15px;
-  padding: 15px;
-  background: #f7fafc;
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .draw-count-selector label {
-  display: block;
-  margin-bottom: 10px;
-  font-weight: 600;
-  color: #2d3748;
+  font-size: 14px;
+  color: #e2e8f0;
 }
 
 .count-controls {
   display: flex;
   gap: 10px;
   align-items: center;
-  justify-content: center;
 }
 
 .count-btn {
@@ -1625,10 +2014,10 @@ h4 {
   color: white;
   border: none;
   border-radius: 8px;
+  cursor: pointer;
   font-size: 20px;
   font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .count-btn:hover {
@@ -1639,113 +2028,18 @@ h4 {
   width: 80px;
   height: 40px;
   text-align: center;
-  border: 2px solid #cbd5e0;
+  border: 2px solid #4a5568;
   border-radius: 8px;
+  background: #2d3748;
+  color: white;
   font-size: 18px;
   font-weight: bold;
 }
 
 .info-text {
-  padding: 15px;
-  background: #e6fffa;
-  color: #234e52;
-  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
   text-align: center;
-  margin-bottom: 15px;
-  font-weight: 600;
-}
-
-/* ========== 響應式設計 ========== */
-@media (max-width: 1200px) {
-  .field-layout {
-    flex-direction: column;
-  }
-
-  .right-side {
-    width: 100%;
-    display: flex;
-    gap: 15px;
-  }
-
-  .deck-item {
-    flex: 1;
-  }
-
-  .deck-stack {
-    height: 100px;
-  }
-}
-
-@media (max-width: 768px) {
-  .game-board {
-    padding: 10px;
-  }
-
-  .game-container {
-    padding-bottom: 250px;
-  }
-
-  .game-header {
-    flex-direction: column;
-    gap: 15px;
-    padding: 15px;
-  }
-
-  .stats {
-    gap: 15px;
-  }
-
-  .bench-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .hand-cards {
-    gap: 10px;
-  }
-
-  .hand-card {
-    width: 130px;
-  }
-
-  .hand-card img {
-    height: 180px;
-  }
-
-  .action-menu {
-    padding: 15px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
-
-  .action-btn {
-    width: 100%;
-    min-width: auto;
-  }
-
-  .confirm-turn-btn {
-    padding: 10px 20px;
-    font-size: 14px;
-  }
-}
-
-@media (max-width: 480px) {
-  .pokemon-card {
-    max-width: 180px;
-  }
-
-  .bench-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .hand-card {
-    width: 110px;
-  }
-
-  .hand-card img {
-    height: 150px;
-  }
+  padding: 10px;
 }
 </style>
