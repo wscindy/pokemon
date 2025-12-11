@@ -49,3 +49,18 @@ gem "pg", "~> 1.6"
 
 # rack-cors gem
 gem 'rack-cors'
+
+# Authentication
+gem 'devise'
+gem 'omniauth-google-oauth2'
+gem 'omniauth-rails_csrf_protection'
+
+# JWT
+gem 'jwt'
+
+# CORS
+gem 'rack-cors'
+
+gem 'dotenv-rails', groups: [:development, :test]
+
+gem 'httparty'

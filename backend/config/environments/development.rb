@@ -1,6 +1,11 @@
 require "active_support/core_ext/integer/time"
 
 Rails.application.configure do
+
+  config.allowed_cors_origins = [
+  "http://localhost:5173",  # Vite 預設
+  "http://localhost:8080"   # Vue CLI 預設
+]
   # Settings specified here will take precedence over those in config/application.rb.
 
   # Make code changes take effect immediately without server restart.

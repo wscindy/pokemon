@@ -1,7 +1,13 @@
 # app/models/user.rb
 class User < ApplicationRecord
+  # Include default devise modules. Others available are:
+  # :confirmable, :lockable, :timeoutable, :trackable and :omniauthable
+  devise :database_authenticatable, :registerable,
+         :recoverable, :rememberable, :validatable,
+         :omniauthable, omniauth_providers: [:google_oauth2]
   # 驗證
   validates :email, presence: true, uniqueness: true
+  validates :uid, uniqueness: { scope: :provider }, if: -> { uid.present? }
   
   # 關聯：牌卡系統
   has_many :user_cards, dependent: :destroy
@@ -33,5 +39,27 @@ class User < ApplicationRecord
   # 方法：檢查牌組是否完整（60張）
   def deck_complete?
     deck_total_count == 60
+  end
+
+   # OAuth callback handler
+  def self.from_omniauth(auth)
+    where(provider: auth.provider, uid: auth.uid).first_or_create do |user|
+      user.email = auth.info.email
+      user.name = auth.info.name
+      user.avatar_url = auth.info.image
+      user.password = Devise.friendly_token[0, 20]
+    end
+  end
+
+  # Generate refresh token
+  def generate_refresh_token!
+    self.refresh_token = SecureRandom.hex(32)
+    self.refresh_token_expires_at = 30.days.from_now
+    save!
+  end
+
+   # Check if refresh token is valid
+  def refresh_token_valid?
+    refresh_token.present? && refresh_token_expires_at > Time.current
   end
 end

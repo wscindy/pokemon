@@ -1,6 +1,20 @@
 Rails.application.routes.draw do
+  # devise_for :users, skip: [:sessions, :registrations], controllers: {
+  #   omniauth_callbacks: 'users/omniauth_callbacks'
+  # }
+
   namespace :api do
     namespace :v1 do
+      # Auth endpoints
+      post 'auth/google', to: 'auth#google'
+      post 'auth/refresh', to: 'auth#refresh'
+      delete 'auth/logout', to: 'auth#logout'
+      get 'auth/me', to: 'auth#me'
+
+      # User profile (移到這裡)
+      patch 'users/profile', to: 'users#update_profile'
+      put 'users/profile', to: 'users#update_profile'
+
       # 卡片相關
       resources :cards, only: [:index, :show] do
         get :search, on: :collection  
@@ -32,4 +46,10 @@ Rails.application.routes.draw do
       post 'games/:id/move_stadium_card', to: 'games#move_stadium_card'
     end
   end
+  
+  # ActionCable
+  mount ActionCable.server => '/cable'
+
+  # Health check
+  get "up" => "rails/health#show", as: :rails_health_check
 end

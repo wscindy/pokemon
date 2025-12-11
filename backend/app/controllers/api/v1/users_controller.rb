@@ -2,6 +2,7 @@ module Api
   module V1
     class UsersController < ApplicationController
       before_action :set_user, only: [:show, :update, :deck, :add_card, :remove_card]
+      before_action :authenticate_user_from_token!, only: [:update_profile]
       
       # GET /api/v1/users/:id
       def show
@@ -33,6 +34,21 @@ module Api
           render json: @user
         else
           render json: { errors: @user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+      
+      # PATCH/PUT /api/v1/users/profile (新增這個方法)
+      def update_profile
+        if @current_user.update(profile_params)
+          render json: {
+            user: user_json(@current_user),
+            message: 'Profile updated successfully'
+          }, status: :ok
+        else
+          render json: {
+            error: 'Failed to update profile',
+            details: @current_user.errors.full_messages
+          }, status: :unprocessable_entity
         end
       end
       
@@ -91,6 +107,44 @@ module Api
       
       def user_params
         params.require(:user).permit(:email, :name, :uid, :provider, :avatar_url, :online_status)
+      end
+      
+      # 新增這個方法（用於 update_profile）
+      def profile_params
+        params.require(:user).permit(:name, :avatar_url)
+      end
+      
+      # 新增這個方法（JWT 認證）
+      def authenticate_user_from_token!
+        token = cookies.signed[:jwt] || 
+                request.headers['Authorization']&.split(' ')&.last
+
+        unless token
+          return render json: { error: 'No token provided' }, status: :unauthorized
+        end
+
+        decoded = JsonWebToken.decode(token)
+
+        unless decoded
+          return render json: { error: 'Invalid or expired token' }, status: :unauthorized
+        end
+
+        @current_user = User.find_by(id: decoded[:user_id])
+
+        unless @current_user
+          render json: { error: 'User not found' }, status: :unauthorized
+        end
+      end
+      
+      # 新增這個方法（用於回傳 user JSON）
+      def user_json(user)
+        {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatar_url: user.avatar_url,
+          online_status: user.online_status
+        }
       end
     end
   end
