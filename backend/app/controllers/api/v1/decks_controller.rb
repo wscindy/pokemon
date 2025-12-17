@@ -1,7 +1,7 @@
 module Api
   module V1
     class DecksController < ApplicationController
-      before_action :set_current_user
+      before_action :authenticate_user_from_token!  # ✏️ 改用正確的認證
       
       # GET /api/v1/deck - 取得使用者目前的牌組
       def show
@@ -55,6 +55,7 @@ module Api
         
         begin
           ActiveRecord::Base.transaction do
+            # ✏️ 清空**當前用戶**的牌組
             @current_user.user_cards.in_deck.update_all(is_in_deck: false, quantity: 0)
             
             cards_data.each do |card_data|
@@ -65,6 +66,7 @@ module Api
                 raise ActiveRecord::Rollback, "卡片 #{card_unique_id} 不存在"
               end
               
+              # ✏️ 找或建立**當前用戶**的卡片
               user_card = @current_user.user_cards.find_or_initialize_by(card_unique_id: card_unique_id)
               user_card.is_in_deck = true
               user_card.quantity = quantity
@@ -90,7 +92,7 @@ module Api
       # DELETE /api/v1/deck - 刪除牌組
       def destroy
         begin
-          # 清空所有在牌組中的卡片
+          # ✏️ 清空**當前用戶**的牌組
           @current_user.user_cards.in_deck.update_all(is_in_deck: false, quantity: 0)
           
           render json: {
@@ -114,8 +116,26 @@ module Api
       
       private
       
-      def set_current_user
-        @current_user = User.first || User.create!(email: 'test@example.com', name: 'Test User')
+      # ✏️ 改用正確的認證方法
+      def authenticate_user_from_token!
+        token = cookies.signed[:jwt] || 
+                request.headers['Authorization']&.split(' ')&.last
+
+        unless token
+          return render json: { error: 'No token provided' }, status: :unauthorized
+        end
+
+        decoded = JsonWebToken.decode(token)
+
+        unless decoded
+          return render json: { error: 'Invalid or expired token' }, status: :unauthorized
+        end
+
+        @current_user = User.find_by(id: decoded[:user_id])
+
+        unless @current_user
+          render json: { error: 'User not found' }, status: :unauthorized
+        end
       end
     end
   end
