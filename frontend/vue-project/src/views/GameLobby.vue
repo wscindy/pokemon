@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { gameAPI } from '@/services/api'
-import authService from '@/services/auth'  // 加入這行
+import authService from '@/services/auth'
 
 const router = useRouter()
 
@@ -12,11 +12,14 @@ const userProfile = ref({
   avatar_url: ''
 })
 
-// 新增 loading 狀態
+const currentRoomId = ref(null)
+const roomIdInput = ref('')
 const isStartingBattle = ref(false)
 const isLoading = ref(true)
+const isJoining = ref(false)
+const errorMessage = ref('')
 
-// 預設頭像列表（與 ProfileSetup 相同）
+// 預設頭像列表
 const avatars = [
   { id: 1, emoji: '⚡' },
   { id: 2, emoji: '🔥' },
@@ -30,20 +33,16 @@ const avatars = [
 ]
 
 const getUserAvatar = () => {
-  // 如果有 avatar_url（emoji），直接顯示
   if (userProfile.value.avatar_url) {
     return userProfile.value.avatar_url
   }
-  // 否則根據 avatarId 找
   const avatar = avatars.find(a => a.id === userProfile.value.avatarId)
   return avatar?.emoji || '👤'
 }
 
 onMounted(async () => {
   try {
-    // 從後端 API 取得當前用戶資料
     const user = await authService.getCurrentUser()
-    
     console.log('Current user:', user)
     
     userProfile.value = {
@@ -53,7 +52,6 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('Failed to get user profile:', error)
-    // 如果取得失敗，導回登入頁
     router.push({ name: 'Landing' })
   } finally {
     isLoading.value = false
@@ -66,39 +64,84 @@ const handleLogout = async () => {
     router.push({ name: 'Landing' })
   } catch (error) {
     console.error('Logout failed:', error)
-    // 即使 API 失敗也清除前端狀態
     router.push({ name: 'Landing' })
   }
 }
 
-// 修改這個函數
+// 開始對戰（建立房間）
 const handleStartBattle = async () => {
   isStartingBattle.value = true
+  errorMessage.value = ''
   
   try {
-    // 1. 初始化遊戲
+    console.log('🎮 開始建立房間...')
+    
     const initResponse = await gameAPI.initializeGame()
-    const gameStateId = initResponse.data.game_state_id
+    console.log('✅ 初始化回應:', initResponse.data)
     
-    // 2. 發牌
-    await gameAPI.setupGame(gameStateId)
+    const roomId = initResponse.data.room_id
     
-    // 3. 跳轉到遊戲畫面
+    console.log('🎴 開始發牌...')
+    await gameAPI.setupGame(roomId)
+    console.log('✅ 發牌完成')
+    
+    currentRoomId.value = roomId
+    
+    console.log('🚀 跳轉到遊戲畫面:', roomId)
     router.push({ 
       name: 'GameBoard',
-      params: { id: gameStateId }
+      params: { id: String(roomId) }
     })
     
   } catch (error) {
-    console.error('開始對戰失敗:', error)
-    alert('開始對戰失敗: ' + (error.response?.data?.error || error.message))
+    console.error('❌ 開始對戰失敗:', error)
+    errorMessage.value = error.response?.data?.error || '開始對戰失敗'
   } finally {
     isStartingBattle.value = false
   }
 }
 
-const handleSpectate = () => {
-  alert('觀戰功能開發中...')
+// 加入房間
+const handleJoinRoom = async () => {
+  if (!roomIdInput.value) {
+    errorMessage.value = '請輸入房間號碼'
+    return
+  }
+  
+  isJoining.value = true
+  errorMessage.value = ''
+  
+  try {
+    console.log('🚪 加入房間:', roomIdInput.value)
+    
+    const response = await gameAPI.joinRoom(roomIdInput.value)
+    console.log('✅ 加入房間成功:', response.data)
+    
+    console.log('🎴 開始發牌...')
+    await gameAPI.setupGame(roomIdInput.value)
+    console.log('✅ 發牌完成')
+    
+    console.log('🚀 跳轉到遊戲畫面:', roomIdInput.value)
+    router.push({
+      name: 'GameBoard',
+      params: { id: String(roomIdInput.value) }
+    })
+    
+  } catch (error) {
+    console.error('❌ 加入房間失敗:', error)
+    const errorMsg = error.response?.data?.error || '加入房間失敗'
+    const hint = error.response?.data?.hint || ''
+    
+    errorMessage.value = hint ? `${errorMsg}\n\n💡 ${hint}` : errorMsg
+  } finally {
+    isJoining.value = false
+  }
+}
+
+// 複製房間號碼
+const copyRoomId = () => {
+  navigator.clipboard.writeText(currentRoomId.value)
+  alert('房間號碼已複製！')
 }
 
 const handleDeckManagement = () => {
@@ -109,157 +152,175 @@ const handleDeckManagement = () => {
 <template>
   <div class="game-lobby">
     <!-- Loading 狀態 -->
-    <div v-if="isLoading" class="loading-screen">
-      <div class="spinner"></div>
-      <p>載入中...</p>
+    <div v-if="isLoading" class="loading-container">
+      <div class="loading-spinner">載入中...</div>
     </div>
-    
+
     <!-- 主要內容 -->
-    <template v-else>
-      <!-- 頂部導航 -->
+    <div v-else class="lobby-container">
+      <!-- Header -->
       <header class="lobby-header">
-        <div class="header-content">
-          <div class="logo">
-            <h1 class="logo-text">POKÉMON TCG</h1>
+        <div class="header-left">
+          <h1 class="header-title">⚡ Pokémon TCG Online</h1>
+        </div>
+        
+        <div class="header-right">
+          <div class="user-profile">
+            <div class="avatar">{{ getUserAvatar() }}</div>
+            <span class="nickname">{{ userProfile.nickname }}</span>
           </div>
-          
-          <div class="user-section">
-            <div class="user-info">
-              <div class="user-avatar">{{ getUserAvatar() }}</div>
-              <span class="user-nickname">{{ userProfile.nickname }}</span>
-            </div>
-            <button class="logout-btn" @click="handleLogout">登出</button>
-          </div>
+          <button @click="handleLogout" class="logout-btn">登出</button>
         </div>
       </header>
-      
-      <!-- 主要內容 -->
-      <main class="lobby-main">
-        <div class="main-content">
-          <h2 class="welcome-title">歡迎回來，{{ userProfile.nickname }}！</h2>
-          <p class="welcome-subtitle">選擇你的下一步行動</p>
-          
-          <!-- 主要功能按鈕 -->
-          <div class="action-grid">
+
+      <!-- 主要內容區域 -->
+      <main class="lobby-content">
+        <!-- 錯誤訊息 -->
+        <div v-if="errorMessage" class="error-message">
+          {{ errorMessage }}
+        </div>
+
+        <!-- 功能卡片區域 -->
+        <div class="action-grid">
+          <!-- 開始對戰 -->
+          <div class="action-card">
+            <div class="card-icon">🎮</div>
+            <h3 class="card-title">開始對戰</h3>
+            <p class="card-description">建立新房間並開始遊戲</p>
+            
             <button 
-              class="action-card primary" 
-              @click="handleStartBattle"
+              @click="handleStartBattle" 
+              class="primary-btn"
               :disabled="isStartingBattle"
             >
-              <div class="action-icon">⚔️</div>
-              <h3 class="action-title">
-                {{ isStartingBattle ? '準備中...' : '開始對戰' }}
-              </h3>
-              <p class="action-description">尋找對手進行即時對戰</p>
+              {{ isStartingBattle ? '建立中...' : '開始對戰' }}
             </button>
             
-            <button class="action-card" @click="handleSpectate">
-              <div class="action-icon">👁️</div>
-              <h3 class="action-title">觀戰</h3>
-              <p class="action-description">觀看其他玩家的對戰</p>
-            </button>
+            <!-- 顯示房間號碼 -->
+            <div v-if="currentRoomId" class="room-info">
+              <div class="room-label">房間號碼</div>
+              <div class="room-id">{{ currentRoomId }}</div>
+              <button @click="copyRoomId" class="copy-btn">📋 複製</button>
+            </div>
+          </div>
+
+          <!-- 加入房間 -->
+          <div class="action-card">
+            <div class="card-icon">🚪</div>
+            <h3 class="card-title">加入房間</h3>
+            <p class="card-description">輸入房間號碼加入對戰</p>
             
-            <button class="action-card" @click="handleDeckManagement">
-              <div class="action-icon">🎴</div>
-              <h3 class="action-title">牌組管理</h3>
-              <p class="action-description">建立和編輯你的牌組</p>
-            </button>
+            <input 
+              v-model="roomIdInput" 
+              type="text" 
+              placeholder="輸入房間號碼"
+              class="room-input"
+              @keyup.enter="handleJoinRoom"
+            />
             
-            <button class="action-card" disabled>
-              <div class="action-icon">🏆</div>
-              <h3 class="action-title">排行榜</h3>
-              <p class="action-description">即將推出</p>
+            <button 
+              @click="handleJoinRoom" 
+              class="primary-btn"
+              :disabled="isJoining"
+            >
+              {{ isJoining ? '加入中...' : '加入房間' }}
+            </button>
+          </div>
+
+          <!-- 牌組管理 -->
+          <div class="action-card">
+            <div class="card-icon">🎴</div>
+            <h3 class="card-title">牌組管理</h3>
+            <p class="card-description">編輯你的牌組</p>
+            
+            <button @click="handleDeckManagement" class="primary-btn">
+              管理牌組
             </button>
           </div>
         </div>
       </main>
-    </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 .game-lobby {
   min-height: 100vh;
-  background: linear-gradient(180deg, #e8f4f8 0%, #f0f4f8 50%, #e8f4f8 100%);
+  background: #f7fafc;
 }
 
-/* Loading 畫面 */
-.loading-screen {
-  min-height: 100vh;
+/* Loading */
+.loading-container {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 20px;
+  align-items: center;
+  min-height: 100vh;
 }
 
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid rgba(102, 126, 234, 0.2);
-  border-top-color: #667eea;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.loading-spinner {
+  font-size: 24px;
+  color: #667eea;
+  font-weight: 600;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 頂部導航 */
+/* Header */
 .lobby-header {
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-.header-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 16px 24px;
+.header-left {
   display: flex;
-  justify-content: space-between;
   align-items: center;
 }
 
-.logo-text {
+.header-title {
   font-size: 24px;
-  font-weight: 900;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-weight: 700;
+  color: #2d3748;
 }
 
-.user-section {
+.header-right {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.user-info {
+.user-profile {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
   background: #f7fafc;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
-.user-avatar {
+.avatar {
   width: 40px;
   height: 40px;
-  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
   border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
+  border: 2px solid #e2e8f0;
 }
 
-.user-nickname {
+.nickname {
   font-size: 16px;
   font-weight: 600;
   color: #2d3748;
@@ -282,139 +343,197 @@ const handleDeckManagement = () => {
   border-color: #cbd5e0;
 }
 
-/* 主要內容 */
-.lobby-main {
-  padding: 60px 20px;
-}
-
-.main-content {
+/* Main Content */
+.lobby-content {
+  padding: 40px 24px;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.welcome-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: #2d3748;
-  text-align: center;
-  margin-bottom: 8px;
+/* Error Message */
+.error-message {
+  background: #fed7d7;
+  border: 2px solid #fc8181;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  color: #742a2a;
+  white-space: pre-line;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 600;
 }
 
-.welcome-subtitle {
-  font-size: 18px;
-  color: #718096;
-  text-align: center;
-  margin-bottom: 48px;
-}
-
-/* 功能卡片網格 */
+/* Action Grid */
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
 }
 
 .action-card {
   background: white;
-  border: 2px solid #e2e8f0;
   border-radius: 16px;
-  padding: 32px 24px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: center;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
 }
 
-.action-card:hover:not(:disabled) {
-  border-color: #667eea;
+.action-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 
-.action-card:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.card-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
 }
 
-.action-card.primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  color: white;
-}
-
-.action-card.primary .action-title,
-.action-card.primary .action-description {
-  color: white;
-}
-
-.action-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
-}
-
-.action-title {
-  font-size: 22px;
+.card-title {
+  font-size: 24px;
   font-weight: 700;
   color: #2d3748;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.action-description {
+.card-description {
   font-size: 14px;
   color: #718096;
-  line-height: 1.5;
+  margin-bottom: 24px;
+  line-height: 1.6;
 }
 
-/* 響應式設計 */
+/* Buttons */
+.primary-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Room Input */
+.room-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 16px;
+  margin-bottom: 16px;
+  transition: all 0.3s;
+}
+
+.room-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* Room Info */
+.room-info {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  width: 100%;
+}
+
+.room-label {
+  font-size: 12px;
+  color: #718096;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.room-id {
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 12px;
+}
+
+.copy-btn {
+  width: 100%;
+  padding: 10px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  color: #718096;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.copy-btn:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+  color: #2d3748;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .header-content {
-    padding: 12px 16px;
+  .lobby-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
   }
   
-  .logo-text {
+  .header-title {
     font-size: 20px;
   }
   
-  .user-nickname {
-    display: none;
-  }
-  
-  .welcome-title {
-    font-size: 28px;
-  }
-  
-  .welcome-subtitle {
-    font-size: 16px;
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
   }
   
   .action-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+  }
+  
+  .lobby-content {
+    padding: 24px 16px;
   }
 }
 
-@media (max-width: 400px) {
-  .lobby-main {
-    padding: 40px 16px;
+@media (max-width: 480px) {
+  .header-title {
+    font-size: 18px;
   }
   
-  .welcome-title {
-    font-size: 24px;
+  .card-icon {
+    font-size: 48px;
+  }
+  
+  .card-title {
+    font-size: 20px;
   }
   
   .action-card {
-    padding: 24px 20px;
-  }
-  
-  .action-icon {
-    font-size: 40px;
-  }
-  
-  .action-title {
-    font-size: 20px;
+    padding: 24px;
   }
 }
 </style>

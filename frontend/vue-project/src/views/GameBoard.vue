@@ -1,39 +1,36 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { gameAPI } from '@/services/api'
 
 const route = useRoute()
+const router = useRouter()
 const gameStateId = ref(route.params.id)
 const gameState = ref(null)
 const loading = ref(true)
 const error = ref(null)
 
-// 選中的卡片和操作模式
+// 選擇狀態
 const selectedCard = ref(null)
 const selectedMode = ref(null)
 const selectedPokemonOnField = ref(null)
 const selectedEnergyCard = ref(null)
 const operationMode = ref(null)
 const targetPokemon = ref(null)
-
-// 牌庫操作狀態
 const selectedDeckZone = ref(null)
 const drawCount = ref(1)
-
-// 選中的競技場卡
 const selectedStadiumCard = ref(null)
 
-// 操作記錄
+// 動作日誌
 const actionLogs = ref([])
 const isLogPanelExpanded = ref(true)
 const logContainer = ref(null)
 
-// 卡片彈出動畫
+// 彈出卡片
 const popupCard = ref(null)
 const showPopup = ref(false)
 
-// 排序後的手牌
+// 計算屬性：排序手牌
 const sortedHandCards = computed(() => {
   if (!gameState.value?.hand) return []
   return [...gameState.value.hand].sort((a, b) => {
@@ -41,11 +38,10 @@ const sortedHandCards = computed(() => {
   })
 })
 
-// ========== 操作記錄功能 ==========
-
+// 新增日誌
 const addLog = (message, type = 'info') => {
-  const timestamp = new Date().toLocaleTimeString('zh-TW', { 
-    hour: '2-digit', 
+  const timestamp = new Date().toLocaleTimeString('zh-TW', {
+    hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
   })
@@ -53,11 +49,10 @@ const addLog = (message, type = 'info') => {
   actionLogs.value.push({
     id: Date.now(),
     message,
-    type, // 'info', 'player', 'opponent', 'system'
+    type,
     timestamp
   })
   
-  // 自動滾動到最新
   nextTick(() => {
     if (logContainer.value) {
       logContainer.value.scrollTop = logContainer.value.scrollHeight
@@ -65,13 +60,13 @@ const addLog = (message, type = 'info') => {
   })
 }
 
+// 切換日誌面板
 const toggleLogPanel = () => {
   isLogPanelExpanded.value = !isLogPanelExpanded.value
 }
 
-// ========== 卡片彈出動畫 ==========
-
-const showCardPopup = (card, action = '使用') => {
+// 顯示卡片彈出
+const showCardPopup = (card, action) => {
   popupCard.value = { ...card, action }
   showPopup.value = true
   
@@ -81,36 +76,38 @@ const showCardPopup = (card, action = '使用') => {
   }, 1400)
 }
 
-// ========== 按鈕禁用邏輯 ==========
-
+// 檢查戰鬥場是否已有寶可夢
 const isActiveSlotFilled = computed(() => {
-  return gameState.value?.active_pokemon != null
+  return gameState.value?.active_pokemon !== null
 })
 
+// 檢查備戰區是否已滿
 const isBenchFull = computed(() => {
   return gameState.value?.bench?.length >= 5
 })
 
+// 是否可以打到戰鬥場
 const canPlayToActive = computed(() => {
   if (!selectedCard.value) return false
   if (selectedCard.value.card_type !== 'Pokémon') return false
   return !isActiveSlotFilled.value
 })
 
+// 是否可以打到備戰區
 const canPlayToBench = computed(() => {
   if (!selectedCard.value) return false
   if (selectedCard.value.card_type !== 'Pokémon') return false
   return !isBenchFull.value
 })
 
+// 是否可以移動到戰鬥場
 const canMoveToActive = computed(() => {
   if (!selectedPokemonOnField.value) return false
   if (selectedPokemonOnField.value.zone === 'active') return false
   return !isActiveSlotFilled.value
 })
 
-// ========== 取得要顯示的卡片 ==========
-
+// 獲取顯示的卡片資訊（最上層）
 const getDisplayCard = (pokemon) => {
   if (!pokemon) return null
   
@@ -119,7 +116,7 @@ const getDisplayCard = (pokemon) => {
     return {
       name: latestCard.name,
       img_url: latestCard.img_url,
-      hp: latestCard.hp || pokemon.hp,
+      hp: `${latestCard.hp - pokemon.damage_taken}/${latestCard.hp}`,
       card_type: latestCard.card_type
     }
   }
@@ -127,129 +124,139 @@ const getDisplayCard = (pokemon) => {
   return pokemon
 }
 
+// 獲取疊加的卡片（除了最上層）
 const getStackedCardsExceptLatest = (pokemon) => {
-  if (!pokemon.stacked_cards || pokemon.stacked_cards.length === 0) {
-    return []
-  }
+  if (!pokemon.stacked_cards || pokemon.stacked_cards.length === 0) return []
   return pokemon.stacked_cards.slice(1)
 }
 
-// ========== 載入遊戲狀態 ==========
-
+// 載入遊戲狀態
 const loadGameState = async () => {
   try {
     loading.value = true
+    error.value = null
+    
+    console.log('🎮 載入遊戲狀態，Room ID:', gameStateId.value)
+    
     const response = await gameAPI.getGameState(gameStateId.value)
+    
+    console.log('✅ 遊戲狀態載入成功:', response.data)
     
     gameState.value = {
       ...response.data,
       stadium_cards: response.data.stadium_cards || []
     }
     
-    console.log('✅ 載入成功')
+    console.log('📊 解析後的遊戲狀態:', gameState.value)
   } catch (err) {
     console.error('❌ 載入遊戲狀態失敗:', err)
-    error.value = err.message
+    console.error('❌ 錯誤回應:', err.response?.data)
+    error.value = err.response?.data?.error || err.message
+    
+    setTimeout(() => {
+      router.push({ name: 'GameLobby' })
+    }, 3000)
   } finally {
     loading.value = false
   }
 }
 
-// ========== 手牌操作 ==========
-
+// 點擊手牌
 const handleCardClick = (card) => {
   selectedCard.value = card
-  selectedMode.value = 'hand_card'
+  selectedMode.value = 'handcard'
   operationMode.value = null
   selectedPokemonOnField.value = null
   selectedStadiumCard.value = null
-  
-  console.log('選中卡片:', card.name)
+  console.log('選擇手牌:', card.name)
 }
 
+// 打出寶可夢到戰鬥場
 const playToActive = async () => {
   if (!selectedCard.value || !canPlayToActive.value) return
   
   try {
     await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'active')
-    addLog(`你出牌：${selectedCard.value.name} → 戰鬥場`, 'player')
+    addLog(`${selectedCard.value.name} 打到戰鬥場`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('出牌成功!')
+    alert('寶可夢已打到戰鬥場！')
   } catch (err) {
-    alert('出牌失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 打出寶可夢到備戰區
 const playToBench = async () => {
   if (!selectedCard.value || !canPlayToBench.value) return
   
   try {
     await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'bench')
-    addLog(`你出牌：${selectedCard.value.name} → 備戰區`, 'player')
+    addLog(`${selectedCard.value.name} 打到備戰區`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('出牌成功!')
+    alert('寶可夢已打到備戰區！')
   } catch (err) {
-    alert('出牌失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 打出競技場卡
 const playStadiumCard = async () => {
   if (!selectedCard.value) return
   
   try {
-    console.log('🏟️ 打出競技場卡:', selectedCard.value.name)
-    showCardPopup(selectedCard.value, '打出')
-    const response = await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'stadium')
-    console.log('✅ 後端回應:', response.data)
+    console.log('打出競技場卡:', selectedCard.value.name)
+    showCardPopup(selectedCard.value, '打出競技場卡')
     
-    addLog(`你打出競技場卡：${selectedCard.value.name}`, 'player')
+    const response = await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'stadium')
+    console.log('競技場卡已打出:', response.data)
+    
+    addLog(`${selectedCard.value.name} 打到競技場`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('競技場卡已打出!')
+    alert('競技場卡已打出！')
   } catch (err) {
-    console.error('❌ 打出失敗:', err)
-    alert('打出失敗: ' + (err.response?.data?.error || err.message))
+    console.error('打出競技場卡失敗:', err)
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 打出支援者卡（直接丟到棄牌堆）
 const playSupporterCard = async () => {
   if (!selectedCard.value) return
   
   try {
-    console.log('👤 使用支援者卡:', selectedCard.value.name)
+    console.log('打出支援者卡:', selectedCard.value.name)
+    showCardPopup(selectedCard.value, '打出支援者卡')
     
-    // 顯示彈出動畫
-    showCardPopup(selectedCard.value, '使用')
-    
-    // 移到棄牌堆
     await gameAPI.moveCard(gameStateId.value, selectedCard.value.id, 'discard')
     
-    addLog(`你使用了【${selectedCard.value.name}】`, 'player')
+    addLog(`${selectedCard.value.name} 使用並丟到棄牌堆`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('支援者卡已使用!')
+    alert('支援者卡已使用！')
   } catch (err) {
-    console.error('❌ 使用失敗:', err)
-    alert('使用失敗: ' + (err.response?.data?.error || err.message))
+    console.error('打出支援者卡失敗:', err)
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 準備附加能量
 const prepareAttachEnergy = () => {
   if (!selectedCard.value) return
   operationMode.value = 'attach'
-  console.log('請選擇目標寶可夢')
+  console.log('請選擇要附加能量的寶可夢')
 }
 
+// 準備疊加卡牌
 const prepareStackCard = () => {
   if (!selectedCard.value) return
   operationMode.value = 'stack'
-  console.log('請選擊場上的寶可夢來疊加卡片')
+  console.log('請選擇要疊加的寶可夢')
 }
 
-// ========== 場上寶可夢操作 ==========
-
+// 點擊場上的寶可夢
 const handleFieldPokemonClick = (pokemon) => {
   if (operationMode.value === 'attach') {
     attachEnergyToPokemon(selectedCard.value, pokemon)
@@ -261,16 +268,17 @@ const handleFieldPokemonClick = (pokemon) => {
     return
   }
   
-  if (operationMode.value === 'transfer_energy_target') {
+  if (operationMode.value === 'transferenergytarget') {
     transferEnergyToPokemon(selectedEnergyCard.value, pokemon)
     return
   }
   
   selectedPokemonOnField.value = pokemon
-  selectedMode.value = 'field_pokemon'
+  selectedMode.value = 'fieldpokemon'
   operationMode.value = null
 }
 
+// 附加能量到寶可夢
 const attachEnergyToPokemon = async (energyCard, pokemon) => {
   try {
     await gameAPI.attachEnergy(
@@ -278,63 +286,67 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
       energyCard.id,
       pokemon.id
     )
-    addLog(`你附加了${energyCard.name}到${getDisplayCard(pokemon).name}`, 'player')
+    
+    addLog(`${energyCard.name} 附加到 ${getDisplayCard(pokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('附加能量成功!')
+    alert('能量附加成功！')
   } catch (err) {
-    alert('附加能量失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 疊加卡牌
 const stackCardOnPokemon = async (card, targetPokemon) => {
   try {
     await gameAPI.stackCard(gameStateId.value, card.id, targetPokemon.id)
-    addLog(`你將${card.name}疊加到${getDisplayCard(targetPokemon).name}`, 'player')
+    addLog(`${card.name} 疊加到 ${getDisplayCard(targetPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('疊加成功!')
+    alert('疊加成功！')
   } catch (err) {
-    alert('疊加失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 移動卡牌
 const moveCardTo = async (card, toZone, toPosition = null) => {
   try {
     await gameAPI.moveCard(gameStateId.value, card.id, toZone, toPosition)
     
     const zoneNames = {
-      'hand': '手牌',
-      'discard': '棄牌堆',
-      'deck': '牌堆',
-      'active': '戰鬥場',
-      'bench': '備戰區'
+      hand: '手牌',
+      discard: '棄牌堆',
+      deck: '牌庫',
+      active: '戰鬥場',
+      bench: '備戰區'
     }
     
-    addLog(`你將${card.name}移至${zoneNames[toZone]}`, 'player')
+    addLog(`${card.name} 移到 ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
-    
-    alert(`已移至${zoneNames[toZone]}`)
+    alert(`已移到${zoneNames[toZone]}`)
   } catch (err) {
-    alert('移動失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 點擊競技場卡
 const handleStadiumCardClick = (stadiumCard) => {
   selectedStadiumCard.value = stadiumCard
-  selectedMode.value = 'stadium_card'
+  selectedMode.value = 'stadiumcard'
   operationMode.value = null
-  console.log('選中競技場卡:', stadiumCard.name)
+  console.log('選擇競技場卡:', stadiumCard.name)
 }
 
+// 移動競技場卡
 const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
   if (!selectedStadiumCard.value) return
   
   try {
     const playerId = targetPlayerId || gameState.value.current_player_id
     
-    console.log('🔄 移動競技場卡:', {
+    console.log('移動競技場卡:', {
       cardId: selectedStadiumCard.value.id,
       playerId,
       targetZone
@@ -346,56 +358,58 @@ const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
       playerId,
       targetZone
     )
-    console.log('✅ 移動成功:', response.data)
+    
+    console.log('競技場卡已移動:', response.data)
     
     const zoneNames = {
-      'hand': '手牌',
-      'discard': '棄牌堆',
-      'deck': '牌庫'
+      hand: '手牌',
+      discard: '棄牌堆',
+      deck: '牌庫'
     }
-    const playerName = playerId === gameState.value.current_player_id ? '你的' : '對手的'
     
-    addLog(`競技場卡${selectedStadiumCard.value.name}移至${playerName}${zoneNames[targetZone]}`, 'system')
+    const playerName = playerId === gameState.value.current_player_id ? '自己的' : '對手的'
+    addLog(`${selectedStadiumCard.value.name} 移到 ${playerName}${zoneNames[targetZone]}`, 'system')
+    
     await loadGameState()
     cancelSelection()
-    
-    alert(`已移至${playerName}${zoneNames[targetZone]}`)
+    alert(`已移到${playerName}${zoneNames[targetZone]}`)
   } catch (err) {
-    console.error('❌ 移動失敗:', err)
-    alert('移動失敗: ' + (err.response?.data?.error || err.message))
+    console.error('移動競技場卡失敗:', err)
+    alert(err.response?.data?.error || err.message)
   }
 }
 
-// ========== 傷害操作 ==========
-
+// 調整傷害
 const adjustDamage = async (pokemon, amount) => {
   const newDamage = Math.max(0, pokemon.damage_taken + amount)
+  
   try {
     await gameAPI.updateDamage(gameStateId.value, pokemon.id, newDamage)
-    addLog(`${getDisplayCard(pokemon).name}受到${amount > 0 ? '+' : ''}${amount}傷害（總計${newDamage}）`, 'info')
+    addLog(`${getDisplayCard(pokemon).name} ${amount > 0 ? '+' : ''}${amount} 傷害 (${newDamage})`, 'info')
     await loadGameState()
   } catch (err) {
-    alert('更新傷害失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 更新傷害
 const updateDamage = async (pokemon) => {
   try {
     await gameAPI.updateDamage(gameStateId.value, pokemon.id, pokemon.damage_taken)
     await loadGameState()
   } catch (err) {
-    alert('更新傷害失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
-// ========== 能量卡操作 ==========
-
+// 選擇能量轉移
 const selectEnergyForTransfer = (energy, fromPokemon) => {
   selectedEnergyCard.value = { ...energy, fromPokemon }
-  selectedMode.value = 'energy_transfer'
+  selectedMode.value = 'energytransfer'
   operationMode.value = null
 }
 
+// 轉移能量到寶可夢
 const transferEnergyToPokemon = async (energyData, toPokemon) => {
   try {
     await gameAPI.transferEnergy(
@@ -405,15 +419,17 @@ const transferEnergyToPokemon = async (energyData, toPokemon) => {
       toPokemon.id,
       null
     )
-    addLog(`${energyData.name}從${getDisplayCard(energyData.fromPokemon).name}轉移到${getDisplayCard(toPokemon).name}`, 'player')
+    
+    addLog(`${energyData.name} 從 ${getDisplayCard(energyData.fromPokemon).name} 轉移到 ${getDisplayCard(toPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('能量轉移成功!')
+    alert('能量轉移成功！')
   } catch (err) {
-    alert('轉移失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
+// 移動能量到其他區域
 const moveEnergyTo = async (energyData, toZone) => {
   try {
     await gameAPI.transferEnergy(
@@ -425,98 +441,97 @@ const moveEnergyTo = async (energyData, toZone) => {
     )
     
     const zoneNames = {
-      'hand': '手牌',
-      'discard': '棄牌堆',
-      'deck': '牌堆'
+      hand: '手牌',
+      discard: '棄牌堆',
+      deck: '牌庫'
     }
     
-    addLog(`${energyData.name}移至${zoneNames[toZone]}`, 'player')
+    addLog(`${energyData.name} 移到 ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
-    
-    alert(`能量已移至${zoneNames[toZone]}`)
+    alert(`已移到${zoneNames[toZone]}`)
   } catch (err) {
-    alert('移動失敗: ' + (err.response?.data?.error || err.message))
-  }
-}
-
-// ========== 牌庫操作 ==========
-
-const handleDeckClick = () => {
-  selectedDeckZone.value = 'deck'
-  selectedMode.value = 'deck_operation'
-  drawCount.value = 1
-}
-
-const handleDiscardClick = () => {
-  selectedDeckZone.value = 'discard'
-  selectedMode.value = 'deck_operation'
-  drawCount.value = 1
-}
-
-const handlePrizeClick = () => {
-  selectedDeckZone.value = 'prize'
-  selectedMode.value = 'deck_operation'
-}
-
-const drawFromDeck = async () => {
-  try {
-    const response = await gameAPI.drawCards(gameStateId.value, drawCount.value)
-    addLog(`你抽了${drawCount.value}張牌`, 'player')
-    await loadGameState()
-    cancelSelection()
-    alert(response.data.message)
-  } catch (err) {
-    alert('抽牌失敗: ' + (err.response?.data?.error || err.message))
-  }
-}
-
-const pickFromDiscard = async () => {
-  try {
-    console.log('🔍 發送請求 - drawCount:', drawCount.value)
-    
-    const response = await gameAPI.pickFromDiscard(gameStateId.value, drawCount.value)
-    
-    const actualCount = response.data.picked_cards?.length || 0
-    addLog(`你從棄牌堆撿了${actualCount}張牌`, 'player')
-    await loadGameState()
-    cancelSelection()
-    
-    alert(`從棄牌堆撿了 ${actualCount} 張牌`)
-    
-  } catch (err) {
-    console.error('🔍 錯誤:', err)
     alert(err.response?.data?.error || err.message)
   }
 }
 
-const takePrizeCard = async () => {
+// 點擊牌庫
+const handleDeckClick = () => {
+  selectedDeckZone.value = 'deck'
+  selectedMode.value = 'deckoperation'
+  drawCount.value = 1
+}
+
+// 點擊棄牌堆
+const handleDiscardClick = () => {
+  selectedDeckZone.value = 'discard'
+  selectedMode.value = 'deckoperation'
+  drawCount.value = 1
+}
+
+// 點擊獎勵卡
+const handlePrizeClick = () => {
+  selectedDeckZone.value = 'prize'
+  selectedMode.value = 'deckoperation'
+}
+
+// 從牌庫抽牌
+const drawFromDeck = async () => {
   try {
-    const response = await gameAPI.takePrize(gameStateId.value)
-    addLog('你領取了1張獎勵卡', 'player')
+    const response = await gameAPI.drawCards(gameStateId.value, drawCount.value)
+    addLog(`抽了 ${drawCount.value} 張牌`, 'player')
     await loadGameState()
     cancelSelection()
     alert(response.data.message)
   } catch (err) {
-    alert('領取失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
-// ========== 回合管理 ==========
+// 從棄牌堆撿牌
+const pickFromDiscard = async () => {
+  try {
+    console.log('從棄牌堆撿牌 - 數量:', drawCount.value)
+    
+    const response = await gameAPI.pickFromDiscard(gameStateId.value, drawCount.value)
+    const actualCount = response.data.picked_cards?.length || 0
+    
+    addLog(`從棄牌堆撿了 ${actualCount} 張牌`, 'player')
+    await loadGameState()
+    cancelSelection()
+    alert(`從棄牌堆撿了 ${actualCount} 張牌`)
+  } catch (err) {
+    console.error('從棄牌堆撿牌失敗:', err)
+    alert(err.response?.data?.error || err.message)
+  }
+}
 
+// 領取獎勵卡
+const takePrizeCard = async () => {
+  try {
+    const response = await gameAPI.takePrize(gameStateId.value)
+    addLog('領取了 1 張獎勵卡', 'player')
+    await loadGameState()
+    cancelSelection()
+    alert(response.data.message)
+  } catch (err) {
+    alert(err.response?.data?.error || err.message)
+  }
+}
+
+// 結束回合
 const confirmTurn = async () => {
   try {
     await gameAPI.endTurn(gameStateId.value)
-    addLog('你結束了回合', 'system')
+    addLog('回合結束', 'system')
     await loadGameState()
-    alert('回合已結束,換對手操作')
+    alert('回合已結束，輪到對手了')
   } catch (err) {
-    alert('結束回合失敗: ' + (err.response?.data?.error || err.message))
+    alert(err.response?.data?.error || err.message)
   }
 }
 
-// ========== 通用操作 ==========
-
+// 取消選擇
 const cancelSelection = () => {
   selectedCard.value = null
   selectedMode.value = null
@@ -530,215 +545,233 @@ const cancelSelection = () => {
 }
 
 onMounted(() => {
+  console.log('🚀 GameBoard mounted, Room ID:', gameStateId.value)
   loadGameState()
   addLog('遊戲開始', 'system')
 })
+
+
 </script>
 
 <template>
   <div class="game-board">
+    <!-- Loading -->
     <div v-if="loading" class="loading">
-      載入遊戲中...
+      <div>載入中... Room ID: {{ gameStateId }}</div>
     </div>
     
+    <!-- Error -->
     <div v-else-if="error" class="error">
-      <h2>載入失敗</h2>
+      <h2>錯誤</h2>
       <p>{{ error }}</p>
       <button @click="loadGameState">重試</button>
+      <button @click="router.push({ name: 'GameLobby' })">返回大廳</button>
     </div>
     
+    <!-- Game Board -->
     <div v-else-if="gameState" class="game-container">
-      <!-- 結束回合按鈕 -->
+      <!-- 回合控制 -->
       <div class="turn-controls">
-        <button @click="confirmTurn" class="confirm-turn-btn">
-          ✓ 確認完成
-        </button>
+        <button @click="confirmTurn" class="confirm-turn-btn">結束回合</button>
       </div>
-
-      <!-- 操作記錄面板 -->
-      <div class="action-log-panel" :class="{ 'collapsed': !isLogPanelExpanded }">
+      
+      <!-- 動作日誌面板 -->
+      <div class="action-log-panel" :class="{ collapsed: !isLogPanelExpanded }">
         <div v-if="isLogPanelExpanded" class="log-panel-content">
           <div class="log-panel-header">
-            <h3>📜 操作記錄</h3>
-            <button @click="toggleLogPanel" class="toggle-btn">−</button>
+            <h3>動作日誌</h3>
+            <button @click="toggleLogPanel" class="toggle-btn">✕</button>
           </div>
           <div class="log-panel-body" ref="logContainer">
-            <div 
-              v-for="log in actionLogs" 
+            <div
+              v-for="log in actionLogs"
               :key="log.id"
               class="log-item"
-              :class="'log-' + log.type"
+              :class="`log-${log.type}`"
             >
               <span class="log-time">{{ log.timestamp }}</span>
               <span class="log-message">{{ log.message }}</span>
             </div>
           </div>
         </div>
-        
         <div v-else class="log-panel-tab" @click="toggleLogPanel">
-          <span class="tab-text">📜 記錄</span>
+          <span class="tab-text">動作日誌</span>
         </div>
       </div>
-
-      <!-- 卡片彈出動畫 -->
+      
+      <!-- 彈出卡片動畫 -->
       <transition name="popup-fade">
         <div v-if="showPopup && popupCard" class="card-popup-overlay">
           <div class="card-popup">
             <div class="popup-action-label">{{ popupCard.action }}</div>
-            <img :src="popupCard.img_url" :alt="popupCard.name">
+            <img :src="popupCard.img_url" :alt="popupCard.name" />
             <h3>{{ popupCard.name }}</h3>
           </div>
         </div>
       </transition>
-
-      <!-- 遊戲資訊 -->
+      
+      <!-- Header -->
       <header class="game-header">
         <div class="game-info">
-          <h2>遊戲 #{{ gameStateId }}</h2>
-          <p>回合: {{ gameState.round_number || 0 }}</p>
+          <h2>房間 ID: {{ gameStateId }}</h2>
+          <p>回合數: {{ gameState.round_number || 0 }}</p>
         </div>
       </header>
-
-      <!-- 對手區域 (鏡像 - 上下顛倒) -->
-      <section class="opponent-area">
-        <h3>🔴 對手</h3>
+      
+      <!-- 對手區域 -->
+      <section class="opponent-area" v-if="gameState.opponent">
+        <h3>對手</h3>
         
-        <!-- 對手手牌 (在最上方，顯示卡背) -->
+        <!-- 對手手牌 -->
         <div class="opponent-hand-zone">
-          <h4>手牌 ({{ sortedHandCards.length }})</h4>
+          <h4>手牌 ({{ gameState.opponent.hand_count }})</h4>
           <div class="opponent-hand-cards">
-            <div 
-              v-for="(card, index) in sortedHandCards" 
+            <div
+              v-for="(card, index) in Array(gameState.opponent.hand_count)"
               :key="'opp-hand-' + index"
               class="card-back"
-            >
-            </div>
+            ></div>
           </div>
         </div>
-
+        
         <div class="field-layout opponent-layout">
-          
-          <!-- 左側:戰鬥場 + 備戰區 (順序相反) -->
+          <!-- 左側：戰鬥場 + 備戰區 -->
           <div class="left-side">
-        <!-- 戰鬥場 (在上) -->
+            <!-- 戰鬥場 -->
             <div class="battle-zone">
               <h4>戰鬥場</h4>
-              <div 
-                v-if="gameState.active_pokemon" 
+              <div
+                v-if="gameState.opponent.active_pokemon"
                 class="pokemon-card opponent-card"
               >
-                <img :src="getDisplayCard(gameState.active_pokemon).img_url" :alt="getDisplayCard(gameState.active_pokemon).name">
-                <p class="pokemon-name">{{ getDisplayCard(gameState.active_pokemon).name }}</p>
-                <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.active_pokemon).hp }}</p>
+                <img
+                  :src="getDisplayCard(gameState.opponent.active_pokemon).img_url"
+                  :alt="getDisplayCard(gameState.opponent.active_pokemon).name"
+                />
+                <p class="pokemon-name">{{ getDisplayCard(gameState.opponent.active_pokemon).name }}</p>
+                <p class="pokemon-hp">HP: {{ gameState.opponent.active_pokemon.hp - gameState.opponent.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.opponent.active_pokemon).hp }}</p>
                 
                 <!-- 傷害顯示 -->
-                <div class="damage-display">
-                  傷害: {{ gameState.active_pokemon.damage_taken }}
-                </div>
+                <div class="damage-display">{{ gameState.opponent.active_pokemon.damage_taken }}</div>
                 
-                <!-- 附加的能量卡 -->
-                <div v-if="gameState.active_pokemon.attached_energies?.length > 0" class="energy-container">
-                  <div 
-                    v-for="energy in gameState.active_pokemon.attached_energies" 
+                <!-- 附加的能量 -->
+                <div
+                  v-if="gameState.opponent.active_pokemon.attached_energies?.length > 0"
+                  class="energy-container"
+                >
+                  <div
+                    v-for="energy in gameState.opponent.active_pokemon.attached_energies"
                     :key="'opp-energy-' + energy.id"
                     class="energy-mini"
                     :title="energy.name"
                   >
-                    <img :src="energy.img_url" :alt="energy.name">
+                    <img :src="energy.img_url" :alt="energy.name" />
                   </div>
                 </div>
-
+                
                 <!-- 疊加的卡片 -->
-                <div v-if="gameState.active_pokemon.stacked_cards?.length > 0" class="stacked-cards-container">
-                  <div 
+                <div
+                  v-if="gameState.opponent.active_pokemon.stacked_cards?.length > 0"
+                  class="stacked-cards-container"
+                >
+                  <div
                     class="stacked-mini-card"
-                    :title="gameState.active_pokemon.name"
+                    :title="gameState.opponent.active_pokemon.name"
                   >
-                    <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
+                    <img
+                      :src="gameState.opponent.active_pokemon.img_url"
+                      :alt="gameState.opponent.active_pokemon.name"
+                    />
                   </div>
-                  
-                  <div 
-                    v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)" 
+                  <div
+                    v-for="card in getStackedCardsExceptLatest(gameState.opponent.active_pokemon)"
                     :key="'opp-stack-' + card.id"
                     class="stacked-mini-card"
                     :title="card.name"
                   >
-                    <img :src="card.img_url" :alt="card.name">
+                    <img :src="card.img_url" :alt="card.name" />
                   </div>
                 </div>
               </div>
-              <div v-else class="empty-slot">
-                無寶可夢
-              </div>
+              <div v-else class="empty-slot">空</div>
             </div>
-            <!-- 備戰區 (在下) -->
+            
+            <!-- 備戰區 -->
             <div class="bench-zone">
               <h4>備戰區</h4>
               <div class="bench-grid">
-                <div 
-                  v-for="pokemon in (gameState.bench || [])" 
+                <div
+                  v-for="pokemon in gameState.opponent.bench"
                   :key="'opp-bench-' + pokemon.id"
                   class="pokemon-card small opponent-card"
                 >
-                  <img :src="getDisplayCard(pokemon).img_url" :alt="getDisplayCard(pokemon).name">
+                  <img
+                    :src="getDisplayCard(pokemon).img_url"
+                    :alt="getDisplayCard(pokemon).name"
+                  />
                   <p class="pokemon-name">{{ getDisplayCard(pokemon).name }}</p>
                   <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ getDisplayCard(pokemon).hp }}</p>
                   
-                  <!-- 傷害顯示(小版) -->
-                  <div class="damage-display-small">
-                    傷害: {{ pokemon.damage_taken }}
-                  </div>
+                  <!-- 傷害顯示 -->
+                  <div class="damage-display-small">{{ pokemon.damage_taken }}</div>
                   
-                  <!-- 附加的能量卡 -->
-                  <div v-if="pokemon.attached_energies?.length > 0" class="energy-container-small">
-                    <div 
-                      v-for="energy in pokemon.attached_energies" 
+                  <!-- 附加的能量 -->
+                  <div
+                    v-if="pokemon.attached_energies?.length > 0"
+                    class="energy-container-small"
+                  >
+                    <div
+                      v-for="energy in pokemon.attached_energies"
                       :key="'opp-bench-energy-' + energy.id"
                       class="energy-mini-small"
                       :title="energy.name"
                     >
-                      <img :src="energy.img_url" :alt="energy.name">
+                      <img :src="energy.img_url" :alt="energy.name" />
                     </div>
                   </div>
-
-                  <!-- 疊加的卡片(小版) -->
-                  <div v-if="pokemon.stacked_cards?.length > 0" class="stacked-cards-container-small">
-                    <div class="stacked-mini-card-small" :title="pokemon.name">
-                      <img :src="pokemon.img_url" :alt="pokemon.name">
+                  
+                  <!-- 疊加的卡片 -->
+                  <div
+                    v-if="pokemon.stacked_cards?.length > 0"
+                    class="stacked-cards-container-small"
+                  >
+                    <div
+                      class="stacked-mini-card-small"
+                      :title="pokemon.name"
+                    >
+                      <img :src="pokemon.img_url" :alt="pokemon.name" />
                     </div>
-                    <div 
-                      v-for="card in getStackedCardsExceptLatest(pokemon)" 
+                    <div
+                      v-for="card in getStackedCardsExceptLatest(pokemon)"
                       :key="'opp-bench-stack-' + card.id"
                       class="stacked-mini-card-small"
                       :title="card.name"
                     >
-                      <img :src="card.img_url" :alt="card.name">
+                      <img :src="card.img_url" :alt="card.name" />
                     </div>
                   </div>
                 </div>
                 
                 <!-- 空位 -->
-                <div 
-                  v-for="i in (5 - (gameState.bench?.length || 0))" 
+                <div
+                  v-for="i in (5 - (gameState.opponent.bench?.length || 0))"
                   :key="'opp-empty-' + i"
                   class="empty-slot small"
                 >
-                  空位 {{ (gameState.bench?.length || 0) + i }}
+                  {{ (gameState.opponent.bench?.length || 0) + i }}
                 </div>
               </div>
             </div>
-
-
           </div>
-
-          <!-- 右側:牌庫 + 棄牌堆 + 獎勵卡 (順序相反) -->
+          
+          <!-- 右側：牌庫、棄牌堆、獎勵卡 -->
           <div class="right-side opponent-right">
             <div class="deck-area">
               <!-- 牌庫 -->
               <div class="deck-item">
                 <h4>牌庫</h4>
                 <div class="deck-stack">
-                  <span class="deck-count">{{ gameState.deck_count || 0 }}</span>
+                  <span class="deck-count">{{ gameState.opponent.deck_count || 0 }}</span>
                 </div>
               </div>
               
@@ -746,7 +779,7 @@ onMounted(() => {
               <div class="deck-item">
                 <h4>棄牌堆</h4>
                 <div class="deck-stack discard">
-                  <span class="deck-count">{{ gameState.discard_count || 0 }}</span>
+                  <span class="deck-count">{{ gameState.opponent.discard_count || 0 }}</span>
                 </div>
               </div>
               
@@ -754,195 +787,211 @@ onMounted(() => {
               <div class="deck-item">
                 <h4>獎勵卡</h4>
                 <div class="deck-stack prize">
-                  <span class="deck-count">{{ gameState.prize_count || 0 }}</span>
+                  <span class="deck-count">{{ gameState.opponent.prize_count || 0 }}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </section>
-
-      <!-- 競技場卡區域 -->
+      
+      <!-- 競技場區域 -->
       <section class="stadium-area">
-        <h3>🏟️ 競技場</h3>
+        <h3>競技場卡</h3>
         <div class="stadium-cards-container">
           <template v-if="gameState.stadium_cards && Array.isArray(gameState.stadium_cards) && gameState.stadium_cards.length > 0">
-            <div 
-              v-for="(stadiumCard, index) in gameState.stadium_cards" 
+            <div
+              v-for="(stadiumCard, index) in gameState.stadium_cards"
               :key="stadiumCard.id || index"
               class="stadium-card"
               @click="handleStadiumCardClick(stadiumCard)"
             >
-              <img 
-                :src="stadiumCard.img_url || 'https://via.placeholder.com/150x210?text=No+Image'" 
-                :alt="stadiumCard.name || '未知卡片'"
-              >
-              <p class="stadium-card-name">{{ stadiumCard.name || '未知' }}</p>
-              <p class="stadium-card-owner">{{ stadiumCard.owner_name || '未知玩家' }}</p>
+              <img
+                :src="stadiumCard.img_url || 'https://via.placeholder.com/150x210?text=No+Image'"
+                :alt="stadiumCard.name"
+              />
+              <p class="stadium-card-name">{{ stadiumCard.name }}</p>
+              <p class="stadium-card-owner">{{ stadiumCard.owner_name }}</p>
             </div>
           </template>
-          
           <div v-else class="empty-stadium">
-            尚無競技場卡
+            無競技場卡
           </div>
         </div>
       </section>
-
+      
       <!-- 玩家區域 -->
       <section class="player-area">
-        <h3>🔵 你的場地</h3>
+        <h3>玩家</h3>
         
         <div class="field-layout">
-          <!-- 左側:戰鬥場 + 備戰區 -->
+          <!-- 左側：戰鬥場 + 備戰區 -->
           <div class="left-side">
             <!-- 戰鬥場 -->
             <div class="battle-zone">
               <h4>戰鬥場</h4>
-              <div 
-                v-if="gameState.active_pokemon" 
+              <div
+                v-if="gameState.active_pokemon"
                 class="pokemon-card"
-                :class="{ 
-                  'target-highlight': operationMode === 'attach' || operationMode === 'stack' || operationMode === 'transfer_energy_target' 
-                }"
+                :class="{ 'target-highlight': operationMode === 'attach' || operationMode === 'stack' || operationMode === 'transferenergytarget' }"
                 @click="handleFieldPokemonClick(gameState.active_pokemon)"
               >
-                <img :src="getDisplayCard(gameState.active_pokemon).img_url" :alt="getDisplayCard(gameState.active_pokemon).name">
+                <img
+                  :src="getDisplayCard(gameState.active_pokemon).img_url"
+                  :alt="getDisplayCard(gameState.active_pokemon).name"
+                />
                 <p class="pokemon-name">{{ getDisplayCard(gameState.active_pokemon).name }}</p>
                 <p class="pokemon-hp">HP: {{ gameState.active_pokemon.hp - gameState.active_pokemon.damage_taken }}/{{ getDisplayCard(gameState.active_pokemon).hp }}</p>
                 
-                <!-- 傷害調整 -->
+                <!-- 傷害控制 -->
                 <div class="damage-controls">
                   <button @click.stop="adjustDamage(gameState.active_pokemon, -10)" class="damage-btn">-10</button>
-                  <input 
-                    type="number" 
-                    v-model.number="gameState.active_pokemon.damage_taken" 
+                  <input
+                    type="number"
+                    v-model.number="gameState.active_pokemon.damage_taken"
                     @change="updateDamage(gameState.active_pokemon)"
                     @click.stop
                     class="damage-input"
                     min="0"
-                  >
+                  />
                   <button @click.stop="adjustDamage(gameState.active_pokemon, 10)" class="damage-btn">+10</button>
                 </div>
                 
-                <!-- 附加的能量卡 -->
-                <div v-if="gameState.active_pokemon.attached_energies?.length > 0" class="energy-container">
-                  <div 
-                    v-for="energy in gameState.active_pokemon.attached_energies" 
+                <!-- 附加的能量 -->
+                <div
+                  v-if="gameState.active_pokemon.attached_energies?.length > 0"
+                  class="energy-container"
+                >
+                  <div
+                    v-for="energy in gameState.active_pokemon.attached_energies"
                     :key="energy.id"
                     class="energy-mini"
                     :title="energy.name"
                     @click.stop="selectEnergyForTransfer(energy, gameState.active_pokemon)"
                   >
-                    <img :src="energy.img_url" :alt="energy.name">
+                    <img :src="energy.img_url" :alt="energy.name" />
                   </div>
                 </div>
-
+                
                 <!-- 疊加的卡片 -->
-                <div v-if="gameState.active_pokemon.stacked_cards?.length > 0" class="stacked-cards-container">
-                  <div 
+                <div
+                  v-if="gameState.active_pokemon.stacked_cards?.length > 0"
+                  class="stacked-cards-container"
+                >
+                  <div
                     class="stacked-mini-card"
                     :title="gameState.active_pokemon.name"
                   >
-                    <img :src="gameState.active_pokemon.img_url" :alt="gameState.active_pokemon.name">
+                    <img
+                      :src="gameState.active_pokemon.img_url"
+                      :alt="gameState.active_pokemon.name"
+                    />
                   </div>
-                  
-                  <div 
-                    v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)" 
+                  <div
+                    v-for="card in getStackedCardsExceptLatest(gameState.active_pokemon)"
                     :key="card.id"
                     class="stacked-mini-card"
                     :title="card.name"
                   >
-                    <img :src="card.img_url" :alt="card.name">
+                    <img :src="card.img_url" :alt="card.name" />
                   </div>
                 </div>
               </div>
-              <div v-else class="empty-slot">
-                無寶可夢
-              </div>
+              <div v-else class="empty-slot">空</div>
             </div>
-
+            
             <!-- 備戰區 -->
             <div class="bench-zone">
               <h4>備戰區</h4>
               <div class="bench-grid">
-                <div 
-                  v-for="pokemon in (gameState.bench || [])" 
+                <div
+                  v-for="pokemon in gameState.bench"
                   :key="pokemon.id"
                   class="pokemon-card small"
-                  :class="{ 
-                    'target-highlight': operationMode === 'attach' || operationMode === 'stack' || operationMode === 'transfer_energy_target' 
-                  }"
+                  :class="{ 'target-highlight': operationMode === 'attach' || operationMode === 'stack' || operationMode === 'transferenergytarget' }"
                   @click="handleFieldPokemonClick(pokemon)"
                 >
-                  <img :src="getDisplayCard(pokemon).img_url" :alt="getDisplayCard(pokemon).name">
+                  <img
+                    :src="getDisplayCard(pokemon).img_url"
+                    :alt="getDisplayCard(pokemon).name"
+                  />
                   <p class="pokemon-name">{{ getDisplayCard(pokemon).name }}</p>
                   <p class="pokemon-hp-small">{{ pokemon.hp - pokemon.damage_taken }}/{{ getDisplayCard(pokemon).hp }}</p>
                   
-                  <!-- 傷害調整(小版) -->
+                  <!-- 傷害控制 -->
                   <div class="damage-controls-small">
                     <button @click.stop="adjustDamage(pokemon, -10)" class="damage-btn-small">-</button>
-                    <input 
-                      type="number" 
-                      v-model.number="pokemon.damage_taken" 
+                    <input
+                      type="number"
+                      v-model.number="pokemon.damage_taken"
                       @change="updateDamage(pokemon)"
                       @click.stop
                       class="damage-input-small"
                       min="0"
-                    >
+                    />
                     <button @click.stop="adjustDamage(pokemon, 10)" class="damage-btn-small">+</button>
                   </div>
                   
-                  <!-- 附加的能量卡 -->
-                  <div v-if="pokemon.attached_energies?.length > 0" class="energy-container-small">
-                    <div 
-                      v-for="energy in pokemon.attached_energies" 
+                  <!-- 附加的能量 -->
+                  <div
+                    v-if="pokemon.attached_energies?.length > 0"
+                    class="energy-container-small"
+                  >
+                    <div
+                      v-for="energy in pokemon.attached_energies"
                       :key="energy.id"
                       class="energy-mini-small"
                       :title="energy.name"
                       @click.stop="selectEnergyForTransfer(energy, pokemon)"
                     >
-                      <img :src="energy.img_url" :alt="energy.name">
+                      <img :src="energy.img_url" :alt="energy.name" />
                     </div>
                   </div>
-
-                  <!-- 疊加的卡片(小版) -->
-                  <div v-if="pokemon.stacked_cards?.length > 0" class="stacked-cards-container-small">
-                    <div class="stacked-mini-card-small" :title="pokemon.name">
-                      <img :src="pokemon.img_url" :alt="pokemon.name">
+                  
+                  <!-- 疊加的卡片 -->
+                  <div
+                    v-if="pokemon.stacked_cards?.length > 0"
+                    class="stacked-cards-container-small"
+                  >
+                    <div
+                      class="stacked-mini-card-small"
+                      :title="pokemon.name"
+                    >
+                      <img :src="pokemon.img_url" :alt="pokemon.name" />
                     </div>
-                    <div 
-                      v-for="card in getStackedCardsExceptLatest(pokemon)" 
+                    <div
+                      v-for="card in getStackedCardsExceptLatest(pokemon)"
                       :key="card.id"
                       class="stacked-mini-card-small"
                       :title="card.name"
                     >
-                      <img :src="card.img_url" :alt="card.name">
+                      <img :src="card.img_url" :alt="card.name" />
                     </div>
                   </div>
                 </div>
                 
                 <!-- 空位 -->
-                <div 
-                  v-for="i in (5 - (gameState.bench?.length || 0))" 
+                <div
+                  v-for="i in (5 - (gameState.bench?.length || 0))"
                   :key="'empty-' + i"
                   class="empty-slot small"
                 >
-                  空位 {{ (gameState.bench?.length || 0) + i }}
+                  {{ (gameState.bench?.length || 0) + i }}
                 </div>
               </div>
             </div>
           </div>
-
-          <!-- 右側:獎勵卡 + 棄牌堆 + 牌庫 -->
+          
+          <!-- 右側：牌庫、棄牌堆、獎勵卡 -->
           <div class="right-side">
             <div class="deck-area">
               <!-- 獎勵卡 -->
               <div class="deck-item">
                 <h4>獎勵卡</h4>
-                <div 
+                <div
                   class="deck-stack prize"
-                  :class="{ 'clickable': (gameState.prize_count || 0) > 0 }"
-                  @click="(gameState.prize_count || 0) > 0 && handlePrizeClick()"
+                  :class="{ clickable: gameState.prize_count > 0 }"
+                  @click="gameState.prize_count > 0 && handlePrizeClick()"
                 >
                   <span class="deck-count">{{ gameState.prize_count || 0 }}</span>
                 </div>
@@ -951,10 +1000,10 @@ onMounted(() => {
               <!-- 棄牌堆 -->
               <div class="deck-item">
                 <h4>棄牌堆</h4>
-                <div 
+                <div
                   class="deck-stack discard"
-                  :class="{ 'clickable': (gameState.discard_count || 0) > 0 }"
-                  @click="(gameState.discard_count || 0) > 0 && handleDiscardClick()"
+                  :class="{ clickable: gameState.discard_count > 0 }"
+                  @click="gameState.discard_count > 0 && handleDiscardClick()"
                 >
                   <span class="deck-count">{{ gameState.discard_count || 0 }}</span>
                 </div>
@@ -963,10 +1012,10 @@ onMounted(() => {
               <!-- 牌庫 -->
               <div class="deck-item">
                 <h4>牌庫</h4>
-                <div 
+                <div
                   class="deck-stack"
-                  :class="{ 'clickable': (gameState.deck_count || 0) > 0 }"
-                  @click="(gameState.deck_count || 0) > 0 && handleDeckClick()"
+                  :class="{ clickable: gameState.deck_count > 0 }"
+                  @click="gameState.deck_count > 0 && handleDeckClick()"
                 >
                   <span class="deck-count">{{ gameState.deck_count || 0 }}</span>
                 </div>
@@ -974,19 +1023,19 @@ onMounted(() => {
             </div>
           </div>
         </div>
-
-        <!-- 手牌 -->
+        
+        <!-- 手牌區域 -->
         <div class="hand-zone">
           <h4>手牌 ({{ sortedHandCards.length }})</h4>
           <div class="hand-cards">
-            <div 
-              v-for="card in sortedHandCards" 
+            <div
+              v-for="card in sortedHandCards"
               :key="card.id"
               class="hand-card"
-              :class="{ 'selected': selectedCard?.id === card.id }"
+              :class="{ selected: selectedCard?.id === card.id }"
               @click="handleCardClick(card)"
             >
-              <img :src="card.img_url" :alt="card.name">
+              <img :src="card.img_url" :alt="card.name" />
               <div class="card-info">
                 <p class="card-name">{{ card.name }}</p>
                 <p class="card-type">{{ card.card_type }}</p>
@@ -997,295 +1046,240 @@ onMounted(() => {
           </div>
         </div>
       </section>
-
-      <!-- 操作選單:手牌 -->
-      <div v-if="selectedMode === 'hand_card' && selectedCard" class="action-menu">
+      
+      <!-- 動作選單：手牌 -->
+      <div v-if="selectedMode === 'handcard' && selectedCard" class="action-menu">
         <div class="action-menu-header">
           <h3>{{ selectedCard.name }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
+        
         <div class="action-buttons">
-          <button 
-            v-if="selectedCard.card_type === 'Pokémon'" 
+          <button
+            v-if="selectedCard.card_type === 'Pokémon'"
             @click="playToActive"
             :disabled="!canPlayToActive"
             class="action-btn primary"
-            :class="{ 'disabled': !canPlayToActive }"
-            :title="!canPlayToActive ? '戰鬥場已有牌' : ''"
+            :class="{ disabled: !canPlayToActive }"
+            :title="!canPlayToActive ? '戰鬥場已有寶可夢' : ''"
           >
-            放到戰鬥場
+            打到戰鬥場
           </button>
-          <button 
-            v-if="selectedCard.card_type === 'Pokémon'" 
+          
+          <button
+            v-if="selectedCard.card_type === 'Pokémon'"
             @click="playToBench"
             :disabled="!canPlayToBench"
             class="action-btn"
-            :class="{ 'disabled': !canPlayToBench }"
-            :title="!canPlayToBench ? '備戰區已滿(5張)' : ''"
+            :class="{ disabled: !canPlayToBench }"
+            :title="!canPlayToBench ? '備戰區已滿 (最多 5 隻)' : ''"
           >
-            放到備戰區
+            打到備戰區
           </button>
-          <button 
-            v-if="selectedCard.card_type && selectedCard.card_type.includes('能量卡')" 
+          
+          <button
+            v-if="selectedCard.card_type && selectedCard.card_type.includes('能量')"
             @click="prepareAttachEnergy"
             class="action-btn primary"
           >
             附加能量
           </button>
-          <button 
-            @click="playStadiumCard"
-            class="action-btn primary"
-          >
-            🏟️ 打出到競技場
+          
+          <button @click="playStadiumCard" class="action-btn primary">
+            打出競技場卡
           </button>
-          <button 
-            @click="playSupporterCard"
-            class="action-btn primary"
-          >
-            👤 使用支援者卡
+          
+          <button @click="playSupporterCard" class="action-btn primary">
+            打出支援者卡
           </button>
-          <button 
-            @click="prepareStackCard"
-            class="action-btn"
-          >
-            疊加到場上寶可夢
+          
+          <button @click="prepareStackCard" class="action-btn">
+            疊加到寶可夢
           </button>
-          <button 
-            @click="moveCardTo(selectedCard, 'discard')"
-            class="action-btn"
-          >
+          
+          <button @click="moveCardTo(selectedCard, 'discard')" class="action-btn">
             丟到棄牌堆
           </button>
-          <button 
-            @click="moveCardTo(selectedCard, 'deck')"
-            class="action-btn"
-          >
-            放回牌堆
+          
+          <button @click="moveCardTo(selectedCard, 'deck')" class="action-btn">
+            放回牌庫
           </button>
-          <button @click="cancelSelection" class="action-btn cancel">
-            取消
-          </button>
+          
+          <button @click="cancelSelection" class="action-btn cancel">取消</button>
         </div>
-        <p v-if="operationMode === 'attach'" class="hint">
-          請點擊場上的寶可夢來附加能量
-        </p>
-        <p v-if="operationMode === 'stack'" class="hint">
-          請點擊場上的寶可夢來疊加卡片
-        </p>
+        
+        <p v-if="operationMode === 'attach'" class="hint">請點擊要附加能量的寶可夢</p>
+        <p v-if="operationMode === 'stack'" class="hint">請點擊要疊加的寶可夢</p>
       </div>
-
-      <!-- 操作選單:場上寶可夢 -->
-      <div v-if="selectedMode === 'field_pokemon' && selectedPokemonOnField" class="action-menu">
+      
+      <!-- 動作選單：場上寶可夢 -->
+      <div v-if="selectedMode === 'fieldpokemon' && selectedPokemonOnField" class="action-menu">
         <div class="action-menu-header">
           <h3>{{ getDisplayCard(selectedPokemonOnField).name }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
+        
         <div class="action-buttons">
-          <button 
-            @click="moveCardTo(selectedPokemonOnField, 'hand')"
-            class="action-btn"
-          >
-            移至手牌
+          <button @click="moveCardTo(selectedPokemonOnField, 'hand')" class="action-btn">
+            移到手牌
           </button>
-          <button 
-            @click="moveCardTo(selectedPokemonOnField, 'discard')"
-            class="action-btn"
-          >
-            移至棄牌堆
+          
+          <button @click="moveCardTo(selectedPokemonOnField, 'discard')" class="action-btn">
+            丟到棄牌堆
           </button>
-          <button 
-            @click="moveCardTo(selectedPokemonOnField, 'deck')"
-            class="action-btn"
-          >
-            移回牌堆
+          
+          <button @click="moveCardTo(selectedPokemonOnField, 'deck')" class="action-btn">
+            放回牌庫
           </button>
-          <button 
+          
+          <button
             v-if="selectedPokemonOnField.zone !== 'active'"
             @click="moveCardTo(selectedPokemonOnField, 'active')"
             :disabled="!canMoveToActive"
             class="action-btn primary"
-            :class="{ 'disabled': !canMoveToActive }"
-            :title="!canMoveToActive ? '戰鬥場已有牌' : ''"
+            :class="{ disabled: !canMoveToActive }"
+            :title="!canMoveToActive ? '戰鬥場已有寶可夢' : ''"
           >
             移到戰鬥場
           </button>
-          <button 
+          
+          <button
             v-if="selectedPokemonOnField.zone !== 'bench'"
             @click="moveCardTo(selectedPokemonOnField, 'bench')"
             class="action-btn"
           >
             移到備戰區
           </button>
-          <button @click="cancelSelection" class="action-btn cancel">
-            取消
-          </button>
+          
+          <button @click="cancelSelection" class="action-btn cancel">取消</button>
         </div>
       </div>
-
-      <!-- 操作選單:競技場卡 -->
-      <div v-if="selectedMode === 'stadium_card' && selectedStadiumCard" class="action-menu">
+      
+      <!-- 動作選單：競技場卡 -->
+      <div v-if="selectedMode === 'stadiumcard' && selectedStadiumCard" class="action-menu">
         <div class="action-menu-header">
-          <h3>{{ selectedStadiumCard.name || '未知卡片' }}</h3>
+          <h3>{{ selectedStadiumCard.name }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
+        
         <div class="action-buttons">
-          <button 
-            @click="moveStadiumCardTo('hand')"
-            class="action-btn"
-          >
-            📥 移到我的手牌
+          <button @click="moveStadiumCardTo('hand')" class="action-btn">
+            移到自己手牌
           </button>
-          <button 
-            @click="moveStadiumCardTo('discard')"
-            class="action-btn"
-          >
-            🗑️ 移到我的棄牌堆
+          
+          <button @click="moveStadiumCardTo('discard')" class="action-btn">
+            丟到自己棄牌堆
           </button>
-          <button 
-            @click="moveStadiumCardTo('deck')"
-            class="action-btn"
-          >
-            📚 移回我的牌庫
+          
+          <button @click="moveStadiumCardTo('deck')" class="action-btn">
+            放回自己牌庫
           </button>
           
           <template v-if="gameState.opponent_id">
-            <button 
-              @click="moveStadiumCardTo('hand', gameState.opponent_id)"
-              class="action-btn"
-            >
-              📤 移到對手的手牌
+            <button @click="moveStadiumCardTo('hand', gameState.opponent_id)" class="action-btn">
+              移到對手手牌
             </button>
-            <button 
-              @click="moveStadiumCardTo('discard', gameState.opponent_id)"
-              class="action-btn"
-            >
-              🗑️ 移到對手的棄牌堆
+            
+            <button @click="moveStadiumCardTo('discard', gameState.opponent_id)" class="action-btn">
+              丟到對手棄牌堆
             </button>
-            <button 
-              @click="moveStadiumCardTo('deck', gameState.opponent_id)"
-              class="action-btn"
-            >
-              📚 移回對手的牌庫
+            
+            <button @click="moveStadiumCardTo('deck', gameState.opponent_id)" class="action-btn">
+              放回對手牌庫
             </button>
           </template>
           
-          <button @click="cancelSelection" class="action-btn cancel">
-            取消
-          </button>
+          <button @click="cancelSelection" class="action-btn cancel">取消</button>
         </div>
       </div>
-
-      <!-- 操作選單:能量轉移 -->
-      <div v-if="selectedMode === 'energy_transfer' && selectedEnergyCard" class="action-menu">
+      
+      <!-- 動作選單：能量轉移 -->
+      <div v-if="selectedMode === 'energytransfer' && selectedEnergyCard" class="action-menu">
         <div class="action-menu-header">
           <h3>{{ selectedEnergyCard.name }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
+        
         <div class="action-buttons">
-          <button 
-            @click="operationMode = 'transfer_energy_target'"
-            class="action-btn primary"
-          >
-            轉移到寶可夢
+          <button @click="operationMode = 'transferenergytarget'" class="action-btn primary">
+            轉移到其他寶可夢
           </button>
-          <button 
-            @click="moveEnergyTo(selectedEnergyCard, 'hand')"
-            class="action-btn"
-          >
+          
+          <button @click="moveEnergyTo(selectedEnergyCard, 'hand')" class="action-btn">
             移到手牌
           </button>
-          <button 
-            @click="moveEnergyTo(selectedEnergyCard, 'discard')"
-            class="action-btn"
-          >
-            移到棄牌堆
+          
+          <button @click="moveEnergyTo(selectedEnergyCard, 'discard')" class="action-btn">
+            丟到棄牌堆
           </button>
-          <button 
-            @click="moveEnergyTo(selectedEnergyCard, 'deck')"
-            class="action-btn"
-          >
-            移回牌堆
+          
+          <button @click="moveEnergyTo(selectedEnergyCard, 'deck')" class="action-btn">
+            放回牌庫
           </button>
-          <button @click="cancelSelection" class="action-btn cancel">
-            取消
-          </button>
+          
+          <button @click="cancelSelection" class="action-btn cancel">取消</button>
         </div>
-        <p v-if="operationMode === 'transfer_energy_target'" class="hint">
-          請點擊目標寶可夢
-        </p>
+        
+        <p v-if="operationMode === 'transferenergytarget'" class="hint">請點擊目標寶可夢</p>
       </div>
-
-      <!-- 操作選單:牌庫/棄牌堆/獎勵卡 -->
-      <div v-if="selectedMode === 'deck_operation' && selectedDeckZone" class="action-menu">
+      
+      <!-- 動作選單：牌庫操作 -->
+      <div v-if="selectedMode === 'deckoperation' && selectedDeckZone" class="action-menu">
         <div class="action-menu-header">
-          <h3>
-            {{ selectedDeckZone === 'deck' ? '牌庫' : selectedDeckZone === 'discard' ? '棄牌堆' : '獎勵卡' }}
-          </h3>
+          <h3>{{ selectedDeckZone === 'deck' ? '牌庫' : selectedDeckZone === 'discard' ? '棄牌堆' : '獎勵卡' }}</h3>
           <button @click="cancelSelection" class="close-btn">✕</button>
         </div>
         
-        <!-- 牌庫操作 -->
+        <!-- 牌庫抽牌 -->
         <div v-if="selectedDeckZone === 'deck'" class="action-content">
           <div class="draw-count-selector">
-            <label>抽牌數量:</label>
+            <label>抽幾張牌？</label>
             <div class="count-controls">
               <button @click="drawCount = Math.max(1, drawCount - 1)" class="count-btn">-</button>
-              <input 
-                type="number" 
-                v-model.number="drawCount" 
-                min="1" 
-                max="10"
-                class="count-input"
-              >
+              <input type="number" v-model.number="drawCount" min="1" max="10" class="count-input" />
               <button @click="drawCount = Math.min(10, drawCount + 1)" class="count-btn">+</button>
             </div>
           </div>
+          
           <div class="action-buttons">
             <button @click="drawFromDeck" class="action-btn primary">
               抽 {{ drawCount }} 張牌
             </button>
-            <button @click="cancelSelection" class="action-btn cancel">
-              取消
-            </button>
+            
+            <button @click="cancelSelection" class="action-btn cancel">取消</button>
           </div>
         </div>
-
-        <!-- 棄牌堆操作 -->
+        
+        <!-- 棄牌堆撿牌 -->
         <div v-if="selectedDeckZone === 'discard'" class="action-content">
           <div class="draw-count-selector">
-            <label>撿牌數量:</label>
+            <label>撿幾張牌？</label>
             <div class="count-controls">
               <button @click="drawCount = Math.max(1, drawCount - 1)" class="count-btn">-</button>
-              <input 
-                type="number" 
-                v-model.number="drawCount" 
-                min="1" 
-                max="10"
-                class="count-input"
-              >
+              <input type="number" v-model.number="drawCount" min="1" max="10" class="count-input" />
               <button @click="drawCount = Math.min(10, drawCount + 1)" class="count-btn">+</button>
             </div>
           </div>
+          
           <div class="action-buttons">
             <button @click="pickFromDiscard" class="action-btn primary">
               撿 {{ drawCount }} 張牌
             </button>
-            <button @click="cancelSelection" class="action-btn cancel">
-              取消
-            </button>
+            
+            <button @click="cancelSelection" class="action-btn cancel">取消</button>
           </div>
         </div>
-
-        <!-- 獎勵卡操作 -->
+        
+        <!-- 獎勵卡 -->
         <div v-if="selectedDeckZone === 'prize'" class="action-content">
-          <p class="info-text">領取一張獎勵卡到手牌</p>
+          <p class="info-text">擊敗對手的寶可夢時可以領取獎勵卡</p>
+          
           <div class="action-buttons">
             <button @click="takePrizeCard" class="action-btn primary">
               領取獎勵卡
             </button>
-            <button @click="cancelSelection" class="action-btn cancel">
-              取消
-            </button>
+            
+            <button @click="cancelSelection" class="action-btn cancel">取消</button>
           </div>
         </div>
       </div>
@@ -1294,11 +1288,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* [保留所有原有的 CSS 樣式] */
 * {
   box-sizing: border-box;
 }
 
-/* ========== 主要背景 (深藍色) ========== */
 .game-board {
   min-height: 100vh;
   background: linear-gradient(180deg, #1a365d 0%, #2d3748 100%);
@@ -1309,13 +1303,25 @@ onMounted(() => {
   max-width: 100vw;
 }
 
-.loading, .error {
+.loading,
+.error {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
   font-size: 24px;
+}
+
+.error button {
+  margin: 10px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  background: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 8px;
 }
 
 .game-container {
@@ -1325,7 +1331,7 @@ onMounted(() => {
   width: 100%;
 }
 
-/* ========== 結束回合按鈕 ========== */
+/* 回合控制 */
 .turn-controls {
   position: fixed;
   top: 20px;
@@ -1351,7 +1357,7 @@ onMounted(() => {
   box-shadow: 0 6px 16px rgba(72, 187, 120, 0.5);
 }
 
-/* ========== 操作記錄面板 ========== */
+/* 動作日誌面板 */
 .action-log-panel {
   position: fixed;
   top: 80px;
@@ -1468,7 +1474,6 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* 收合狀態的標籤 */
 .log-panel-tab {
   background: rgba(26, 32, 44, 0.95);
   width: 50px;
@@ -1498,7 +1503,7 @@ onMounted(() => {
   letter-spacing: 2px;
 }
 
-/* ========== 卡片彈出動畫 ========== */
+/* 彈出卡片 */
 .card-popup-overlay {
   position: fixed;
   top: 0;
@@ -1560,7 +1565,7 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* ========== 遊戲資訊 ========== */
+/* Header */
 .game-header {
   background: rgba(255, 255, 255, 0.1);
   padding: 20px;
@@ -1571,7 +1576,7 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
-/* ========== 對手區域 ========== */
+/* 對手區域 */
 .opponent-area {
   background: rgba(220, 53, 69, 0.15);
   padding: 20px;
@@ -1588,7 +1593,6 @@ onMounted(() => {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* 對手區域特殊佈局 (鏡像) */
 .opponent-layout {
   flex-direction: row;
 }
@@ -1601,7 +1605,6 @@ onMounted(() => {
   flex-direction: column-reverse;
 }
 
-/* 對手手牌區 (在最上方) */
 .opponent-hand-zone {
   margin-bottom: 20px;
   padding-bottom: 20px;
@@ -1639,13 +1642,11 @@ onMounted(() => {
   font-weight: bold;
 }
 
-/* 對手的卡片不能點擊 */
 .opponent-card {
   cursor: default !important;
   pointer-events: none;
 }
 
-/* 對手的傷害顯示 (不可編輯) */
 .damage-display {
   margin-top: 8px;
   padding: 8px;
@@ -1668,7 +1669,7 @@ onMounted(() => {
   font-size: 11px;
 }
 
-/* ========== 競技場卡區域 ========== */
+/* 競技場區域 */
 .stadium-area {
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%);
   padding: 20px;
@@ -1748,7 +1749,7 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-/* ========== 玩家區域 ========== */
+/* 玩家區域 */
 .player-area {
   background: rgba(59, 130, 246, 0.15);
   padding: 20px;
@@ -1783,7 +1784,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* ========== 戰鬥場 ========== */
 .battle-zone {
   flex-shrink: 0;
   display: flex;
@@ -1791,7 +1791,7 @@ onMounted(() => {
   align-items: center;
 }
 
-h4 {
+.battle-zone h4 {
   margin-bottom: 15px;
   font-size: 18px;
   color: #fbbf24;
@@ -1822,8 +1822,12 @@ h4 {
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); }
-  50% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+  }
 }
 
 .pokemon-card img {
@@ -1844,7 +1848,6 @@ h4 {
   margin-bottom: 8px;
 }
 
-/* ========== 傷害控制 ========== */
 .damage-controls {
   display: flex;
   gap: 5px;
@@ -1880,7 +1883,6 @@ h4 {
   font-size: 14px;
 }
 
-/* ========== 能量卡容器 ========== */
 .energy-container {
   display: flex;
   gap: 4px;
@@ -1915,14 +1917,13 @@ h4 {
   margin: 0;
 }
 
-/* ========== 疊加卡片容器 ========== */
 .stacked-cards-container {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid #e2e8f0;
 }
 
-.stacked-cards-container > div:not(.stacked-label) {
+.stacked-cards-container div:not(.stacked-label) {
   display: inline-block;
   margin-right: 4px;
 }
@@ -1954,7 +1955,6 @@ h4 {
   object-fit: cover;
 }
 
-/* ========== 備戰區 ========== */
 .bench-zone {
   flex: 1;
   min-width: 0;
@@ -2092,7 +2092,6 @@ h4 {
   font-size: 12px;
 }
 
-/* ========== 牌庫區域 ========== */
 .deck-area {
   display: flex;
   flex-direction: column;
@@ -2144,7 +2143,6 @@ h4 {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* ========== 手牌區 ========== */
 .hand-zone {
   margin-top: 30px;
   padding-top: 20px;
@@ -2216,7 +2214,7 @@ h4 {
   color: #4299e1;
 }
 
-/* ========== 操作選單 ========== */
+/* 動作選單 */
 .action-menu {
   position: fixed;
   bottom: 20px;
@@ -2385,5 +2383,25 @@ h4 {
   font-size: 14px;
   text-align: center;
   padding: 10px;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+  .field-layout {
+    flex-direction: column;
+  }
+  
+  .right-side {
+    width: 100%;
+  }
+  
+  .deck-area {
+    flex-direction: row;
+    justify-content: center;
+  }
+  
+  .action-menu {
+    min-width: 90vw;
+  }
 }
 </style>

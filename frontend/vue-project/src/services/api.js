@@ -1,186 +1,201 @@
 // src/services/api.js
 import axios from 'axios'
 
-
-// 從環境變數讀取 API 網址
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1'
 
-
-const api = axios.create({
+// 🔥 建立兩個不同的 axios instance
+// 1. 用於 Cookie-based Auth（Google 登入）
+const cookieApi = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
   }
 })
 
+// 2. 用於 JWT Token Auth（遊戲 API）
+const tokenApi = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+})
 
-// 卡片相關 API
+// 🔥 只對 tokenApi 加上 JWT 攔截器
+tokenApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('jwt')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    console.log('📤 API Request:', config.method.toUpperCase(), config.url)
+    return config
+  },
+  (error) => {
+    console.error('❌ Request Error:', error)
+    return Promise.reject(error)
+  }
+)
+
+// 響應攔截器
+tokenApi.interceptors.response.use(
+  (response) => {
+    console.log('📥 API Response:', response.config.url, response.status)
+    return response
+  },
+  (error) => {
+    console.error('❌ Response Error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data
+    })
+    return Promise.reject(error)
+  }
+)
+
+// cookieApi 的攔截器（只記錄，不加 JWT）
+cookieApi.interceptors.request.use(
+  (config) => {
+    console.log('📤 Cookie API Request:', config.method.toUpperCase(), config.url)
+    return config
+  }
+)
+
+cookieApi.interceptors.response.use(
+  (response) => {
+    console.log('📥 Cookie API Response:', response.config.url, response.status)
+    return response
+  },
+  (error) => {
+    console.error('❌ Cookie API Error:', error.response?.data)
+    return Promise.reject(error)
+  }
+)
+
+// 卡片相關 API（使用 tokenApi）
 export const cardAPI = {
-  // 搜尋卡片
   search(keyword) {
-    return api.get('/cards/search', {
+    return tokenApi.get('/cards/search', {
       params: { q: keyword }
     })
   },
   
-  // 取得單一卡片詳細資訊
   getCard(cardUniqueId) {
-    return api.get(`/cards/${cardUniqueId}`)
+    return tokenApi.get(`/cards/${cardUniqueId}`)
   }
 }
 
-
-// 牌組相關 API
+// 牌組相關 API（使用 tokenApi）
 export const deckAPI = {
-  // 取得使用者的牌組
   getDeck() {
-    return api.get('/deck')
+    return tokenApi.get('/deck')
   },
   
-  // 儲存牌組
   saveDeck(cards) {
-    return api.post('/deck', { cards })
+    return tokenApi.post('/deck', { cards })
   },
   
-  // 驗證牌組
   validateDeck(cards) {
-    return api.post('/deck/validate', { cards })
+    return tokenApi.post('/deck/validate', { cards })
   },
   
-  // 刪除牌組
   deleteDeck() {
-    return api.delete('/deck')
+    return tokenApi.delete('/deck')
   }
 }
 
-
-// 遊戲相關 API
+// 遊戲相關 API（使用 tokenApi）
 export const gameAPI = {
-  // 初始化遊戲
   initializeGame() {
-    return api.post('/games/initialize')
+    return tokenApi.post('/games/initialize')
   },
 
-
-  // 發牌
-  setupGame(gameStateId) {
-    return api.post(`/games/${gameStateId}/setup`)
+  setupGame(roomId) {
+    console.log('🎴 發牌請求 Room ID:', roomId)
+    return tokenApi.post(`/games/${roomId}/setup`)
   },
 
-
-  // 查詢遊戲狀態
-  getGameState(gameStateId) {
-    return api.get(`/games/${gameStateId}/state`)
+  getGameState(roomId) {
+    console.log('🎮 查詢遊戲狀態 Room ID:', roomId)
+    return tokenApi.get(`/games/${roomId}`)
   },
 
-
-  // 抽牌
-  drawCard(gameStateId) {
-    return api.post(`/games/${gameStateId}/draw`)
-  },
-  
-  // 統一的出牌方法 (支援戰鬥場、備戰區、競技場)
-  playCard(gameStateId, cardId, zone) {
-    return api.post(`/games/${gameStateId}/play_card`, {
+  playCard(roomId, cardId, zone) {
+    return tokenApi.post(`/games/${roomId}/play_card`, {
       card_id: cardId,
-      zone: zone  // 'active', 'bench', 'stadium'
+      zone: zone
     })
   },
-  
-  // 附加能量
-  attachEnergy(gameStateId, cardId, targetCardId) {
-    return api.post(`/games/${gameStateId}/attach_energy`, {
+
+  attachEnergy(roomId, energyCardId, targetPokemonId) {
+    return tokenApi.post(`/games/${roomId}/attach_energy`, {
+      card_id: energyCardId,
+      target_card_id: targetPokemonId
+    })
+  },
+
+  moveCard(roomId, cardId, toZone, toPosition = null) {
+    return tokenApi.post(`/games/${roomId}/move_card`, {
+      card_id: cardId,
+      to_zone: toZone,
+      to_position: toPosition
+    })
+  },
+
+  stackCard(roomId, cardId, targetCardId) {
+    return tokenApi.post(`/games/${roomId}/stack_card`, {
       card_id: cardId,
       target_card_id: targetCardId
     })
   },
 
-
-  // 移動卡牌(完全自由)
-  moveCard(gameStateId, cardId, toZone, toPosition = null) {
-    return api.post(`/games/${gameStateId}/move_card`, {
-      card_id: cardId,
-      to_zone: toZone,        // 'hand', 'discard', 'deck', 'active', 'bench'
-      to_position: toPosition  // 如果是 bench,指定位置 0-4
-    })
-  },
-
-
-  // 疊加卡牌(進化或其他)
-  stackCard(gameStateId, cardId, targetCardId) {
-    return api.post(`/games/${gameStateId}/stack_card`, {
-      card_id: cardId,           // 要疊上去的卡
-      target_card_id: targetCardId  // 目標寶可夢
-    })
-  },
-
-
-  // 更新傷害值
-  updateDamage(gameStateId, pokemonId, damageValue) {
-    return api.post(`/games/${gameStateId}/update_damage`, {
+  updateDamage(roomId, pokemonId, damageValue) {
+    return tokenApi.post(`/games/${roomId}/update_damage`, {
       pokemon_id: pokemonId,
       damage_taken: damageValue
     })
   },
 
-
-  // 轉移能量卡(完全自由)
-  transferEnergy(gameStateId, energyId, fromPokemonId, toPokemonId = null, toZone = null) {
-    return api.post(`/games/${gameStateId}/transfer_energy`, {
+  transferEnergy(roomId, energyId, fromPokemonId, toPokemonId = null, toZone = null) {
+    return tokenApi.post(`/games/${roomId}/transfer_energy`, {
       energy_id: energyId,
       from_pokemon_id: fromPokemonId,
-      to_pokemon_id: toPokemonId,  // 轉移到寶可夢
-      to_zone: toZone              // 或是移到其他區域 'hand', 'discard', 'deck'
+      to_pokemon_id: toPokemonId,
+      to_zone: toZone
     })
   },
 
-
-  // 結束回合
-  endTurn(gameStateId) {
-    return api.post(`/games/${gameStateId}/end_turn`)
+  endTurn(roomId) {
+    return tokenApi.post(`/games/${roomId}/end_turn`)
   },
 
-
-  // 攻擊(保留原有)
-  attack(gameStateId, attackerId, defenderId, attackIndex) {
-    return api.post(`/games/${gameStateId}/attack`, {
-      attacker_id: attackerId,
-      defender_id: defenderId,
-      attack_index: attackIndex
-    })
+  drawCards(roomId, count) {
+    return tokenApi.post(`/games/${roomId}/draw_cards`, { count })
   },
 
-
-  // 從牌庫抽牌
-  drawCards(gameStateId, count) {
-    return api.post(`/games/${gameStateId}/draw_cards`, {
-      count: count
-    })
+  pickFromDiscard(roomId, count) {
+    return tokenApi.post(`/games/${roomId}/pick_from_discard`, { count })
   },
 
-
-  // 從棄牌堆撿牌
-  pickFromDiscard(gameStateId, count) {
-    return api.post(`/games/${gameStateId}/pick_from_discard`, {
-      count: count
-    })
+  takePrize(roomId) {
+    return tokenApi.post(`/games/${roomId}/take_prize`)
   },
 
-
-  // 領取獎勵卡
-  takePrize(gameStateId) {
-    return api.post(`/games/${gameStateId}/take_prize`)
-  },
-  
-  // 移動競技場卡
-  moveStadiumCard(gameStateId, stadiumCardId, targetPlayerId, targetZone) {
-    return api.post(`/games/${gameStateId}/move_stadium_card`, {
+  moveStadiumCard(roomId, stadiumCardId, targetPlayerId, targetZone) {
+    return tokenApi.post(`/games/${roomId}/move_stadium_card`, {
       card_id: stadiumCardId,
       player_id: targetPlayerId,
-      target_zone: targetZone  // 'hand', 'discard', 'deck'
+      target_zone: targetZone
     })
+  },
+
+  joinRoom(roomId) {
+    return tokenApi.post(`/rooms/${roomId}/join`)
   }
 }
 
-
-export default api
+// 🔥 預設 export 使用 cookieApi（給 auth.js 使用）
+export default cookieApi
