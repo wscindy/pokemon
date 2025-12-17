@@ -1,78 +1,56 @@
+# app/services/game_setup_service.rb
 class GameSetupService
-  attr_reader :game_state, :user
+  attr_reader :game_state
 
-  def initialize(game_state, user)
+  def initialize(game_state)
     @game_state = game_state
-    @user = user
   end
 
   def call
     ActiveRecord::Base.transaction do
-      draw_initial_hand
-      setup_prize_cards
-      check_basic_pokemon
+      draw_initial_hand_for_player(@game_state.player1_id)
+      draw_initial_hand_for_player(@game_state.player2_id)
+      
+      setup_prize_cards_for_player(@game_state.player1_id)
+      setup_prize_cards_for_player(@game_state.player2_id)
+      
+      check_basic_pokemon_for_player(@game_state.player1_id)
+      check_basic_pokemon_for_player(@game_state.player2_id)
+
+      @game_state.update!(status: 'playing')
     end
 
-    { 
-      success: true, 
-      hand: hand_cards,
-      deck_count: deck_count,
-      prize_count: prize_count
-    }
+    { success: true }
   rescue StandardError => e
     { success: false, error: e.message }
   end
 
   private
 
-  def draw_initial_hand
-    deck_cards = GameCard.where(game_state_id: @game_state.id, user_id: @user.id, zone: 'deck')
-                         .order(:created_at)
-                         .limit(7)
-
-    deck_cards.update_all(zone: 'hand')
+  def draw_initial_hand_for_player(user_id)
+    @game_state.game_cards
+      .where(user_id: user_id, zone: 'deck')
+      .order(:created_at)
+      .limit(7)
+      .update_all(zone: 'hand', zone_position: nil)
   end
 
-  def setup_prize_cards
-    deck_cards = GameCard.where(game_state_id: @game_state.id, user_id: @user.id, zone: 'deck')
-                         .order(:created_at)
-                         .limit(6)
+  def setup_prize_cards_for_player(user_id)
+    prize_cards = @game_state.game_cards
+      .where(user_id: user_id, zone: 'deck')
+      .order(:created_at)
+      .limit(6)
 
-    deck_cards.each_with_index do |card, index|
+    prize_cards.each_with_index do |card, index|
       card.update!(zone: 'prize', zone_position: index + 1)
     end
   end
 
-def check_basic_pokemon
-  basic_pokemon_in_hand = GameCard.joins(:card)
-                                  .where(game_state_id: @game_state.id, user_id: @user.id, zone: 'hand')
-                                  .where("cards.stage = 'Basic' OR cards.stage IS NULL")
-                                  .where(cards: { card_type: 'Pokémon' })
-
-  # 暫時註解掉檢查,方便開發測試
-  # if basic_pokemon_in_hand.empty?
-  #   raise "手牌中沒有基礎寶可夢!需要重新洗牌"
-  # end
-
-  # 開發階段:如果沒有基礎寶可夢,就直接返回(不報錯)
-  if basic_pokemon_in_hand.empty?
-    puts "⚠️ 警告:手牌中沒有基礎寶可夢(開發模式已忽略)"
-  end
-
-  basic_pokemon_in_hand
-end
-
-
-  def hand_cards
-    GameCard.includes(:card)
-            .where(game_state_id: @game_state.id, user_id: @user.id, zone: 'hand')
-  end
-
-  def deck_count
-    GameCard.where(game_state_id: @game_state.id, user_id: @user.id, zone: 'deck').count
-  end
-
-  def prize_count
-    GameCard.where(game_state_id: @game_state.id, user_id: @user.id, zone: 'prize').count
+  def check_basic_pokemon_for_player(user_id)
+    @game_state.game_cards
+      .joins(:card)
+      .where(user_id: user_id, zone: 'hand')
+      .where("cards.stage = 'Basic' OR cards.stage IS NULL")
+      .where(cards: { card_type: 'Pokémon' })
   end
 end

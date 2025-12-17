@@ -1,19 +1,22 @@
+# config/routes.rb
 Rails.application.routes.draw do
-  # devise_for :users, skip: [:sessions, :registrations], controllers: {
-  #   omniauth_callbacks: 'users/omniauth_callbacks'
-  # }
+  # ActionCable WebSocket
+  mount ActionCable.server => '/cable'
 
   namespace :api do
     namespace :v1 do
-      # Auth endpoints
+      # 使用者認證
       post 'auth/google', to: 'auth#google'
       post 'auth/refresh', to: 'auth#refresh'
       delete 'auth/logout', to: 'auth#logout'
       get 'auth/me', to: 'auth#me'
 
-      # User profile (移到這裡)
+      # User profile
       patch 'users/profile', to: 'users#update_profile'
       put 'users/profile', to: 'users#update_profile'
+
+      # 房間相關
+      post 'rooms/:room_id/join', to: 'rooms#join'
 
       # 卡片相關
       resources :cards, only: [:index, :show] do
@@ -28,7 +31,7 @@ Rails.application.routes.draw do
       # 遊戲相關
       post 'games/initialize', to: 'games#initialize_game'
       post 'games/:id/setup', to: 'games#setup_game'
-      get 'games/:id/state', to: 'games#game_state'
+      get 'games/:id', to: 'games#game_state'
       post 'games/:id/play_card', to: 'games#play_card'
       post 'games/:id/attach_energy', to: 'games#attach_energy'
       
@@ -46,9 +49,6 @@ Rails.application.routes.draw do
       post 'games/:id/move_stadium_card', to: 'games#move_stadium_card'
     end
   end
-  
-  # ActionCable
-  mount ActionCable.server => '/cable'
 
   # Health check
   get "up" => "rails/health#show", as: :rails_health_check
