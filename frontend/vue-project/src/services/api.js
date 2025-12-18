@@ -194,6 +194,10 @@ export const gameAPI = {
 
   joinRoom(roomId) {
     return tokenApi.post(`/rooms/${roomId}/join`)
+  },
+  
+  setPrizeCards(roomId, count) {
+  return tokenApi.post(`/games/${roomId}/set_prize_cards`, { count })
   }
 }
 

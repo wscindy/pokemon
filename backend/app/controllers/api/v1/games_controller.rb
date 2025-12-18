@@ -6,7 +6,8 @@ module Api
       before_action :set_game_state, only: [
         :setup_game, :game_state, :play_card, :attach_energy,
         :move_card, :stack_card, :update_damage, :transfer_energy, :end_turn,
-        :draw_cards, :pick_from_discard, :take_prize, :move_stadium_card
+        :draw_cards, :pick_from_discard, :take_prize, :move_stadium_card,
+        :set_prize_cards
       ]
 
       # 初始化遊戲
@@ -313,6 +314,29 @@ module Api
 
         render json: {
           message: '競技場卡移動成功',
+          game_state: game_state_json(@game_state.reload)
+        }
+      end
+
+      def set_prize_cards
+        count = params[:count].to_i
+        
+        deck_cards = @game_state.game_cards
+          .where(user_id: @current_user.id, zone: 'deck')
+          .order(:created_at)
+          .limit(count)
+
+        deck_cards.update_all(zone: 'prize')
+
+        # 加上 WebSocket 廣播
+        broadcast_game_update('prize_cards_set', {
+          count: deck_cards.count,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+
+        render json: {
+          message: "設定了 #{deck_cards.count} 張獎勵卡",
           game_state: game_state_json(@game_state.reload)
         }
       end

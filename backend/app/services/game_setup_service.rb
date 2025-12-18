@@ -1,56 +1,52 @@
 # app/services/game_setup_service.rb
-class GameSetupService
-  attr_reader :game_state
 
+class GameSetupService
   def initialize(game_state)
     @game_state = game_state
   end
 
   def call
-    ActiveRecord::Base.transaction do
-      draw_initial_hand_for_player(@game_state.player1_id)
-      draw_initial_hand_for_player(@game_state.player2_id)
-      
-      setup_prize_cards_for_player(@game_state.player1_id)
-      setup_prize_cards_for_player(@game_state.player2_id)
-      
-      check_basic_pokemon_for_player(@game_state.player1_id)
-      check_basic_pokemon_for_player(@game_state.player2_id)
-
-      @game_state.update!(status: 'playing')
+    # 🔥 檢查是否已經發過牌
+    if @game_state.game_cards.where(zone: 'hand').any?
+      Rails.logger.warn "⚠️ 遊戲已經發過牌，跳過"
+      return { success: true, game_state: @game_state }
     end
 
-    { success: true }
-  rescue StandardError => e
+    # 🔥 只為還沒拿到牌的玩家發牌
+    [@game_state.player1, @game_state.player2].compact.each do |player|
+      # 檢查這個玩家是否已經有牌
+      unless @game_state.game_cards.exists?(user_id: player.id, zone: 'hand')
+        deal_cards_to_player(player)
+      end
+    end
+
+    @game_state.update!(status: 'playing')
+
+    { success: true, game_state: @game_state }
+  rescue => e
+    Rails.logger.error "❌ 發牌失敗: #{e.message}"
     { success: false, error: e.message }
   end
 
   private
 
-  def draw_initial_hand_for_player(user_id)
-    @game_state.game_cards
-      .where(user_id: user_id, zone: 'deck')
+  def deal_cards_to_player(player)
+    # 抽 7 張手牌
+    deck_cards = @game_state.game_cards
+      .where(user_id: player.id, zone: 'deck')
       .order(:created_at)
       .limit(7)
-      .update_all(zone: 'hand', zone_position: nil)
-  end
+    
+    deck_cards.update_all(zone: 'hand', zone_position: nil)
 
-  def setup_prize_cards_for_player(user_id)
+    # 設定 6 張獎勵卡
     prize_cards = @game_state.game_cards
-      .where(user_id: user_id, zone: 'deck')
+      .where(user_id: player.id, zone: 'deck')
       .order(:created_at)
       .limit(6)
+    
+    prize_cards.update_all(zone: 'prize')
 
-    prize_cards.each_with_index do |card, index|
-      card.update!(zone: 'prize', zone_position: index + 1)
-    end
-  end
-
-  def check_basic_pokemon_for_player(user_id)
-    @game_state.game_cards
-      .joins(:card)
-      .where(user_id: user_id, zone: 'hand')
-      .where("cards.stage = 'Basic' OR cards.stage IS NULL")
-      .where(cards: { card_type: 'Pokémon' })
+    Rails.logger.info "✅ 為玩家 #{player.name} 發牌完成"
   end
 end

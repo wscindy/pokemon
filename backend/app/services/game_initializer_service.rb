@@ -40,7 +40,7 @@ class GameInitializerService
     @game_state = GameState.create!(
       room: @room,
       player1: @user,
-      player2: @user,  # 單人測試時用同一個 user
+      player2: nil,  # 單人測試時用同一個 user
       current_turn_user: @user,
       round_number: 1,
       status: 'setup'
@@ -48,8 +48,8 @@ class GameInitializerService
   end
 
   def initialize_deck
-    # ✅ 為兩個玩家都建立牌組
-    [@game_state.player1, @game_state.player2].uniq.each do |player|
+    # 過濾掉 nil
+    [@game_state.player1, @game_state.player2].compact.each do |player|
       create_deck_for_player(player)
     end
   end
