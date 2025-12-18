@@ -1,66 +1,120 @@
+// frontend/vue-project/src/services/websocket.js
 import { createConsumer } from '@rails/actioncable'
+import axios from 'axios'
 
 class WebSocketService {
   constructor() {
-    this.cable = null
-    this.subscriptions = {}
+    this.consumer = null
+    this.subscription = null
+    this.callbacks = {}
   }
 
-  // 連接 WebSocket（需要傳入 JWT token）
-  connect(token) {
-    if (this.cable) {
+  async connect(roomId) {
+    if (this.subscription) {
+      console.log('⚠️ 已經連線，先斷線')
       this.disconnect()
     }
 
-    this.cable = createConsumer(`ws://localhost:3000/cable?token=${token}`)
-    console.log('WebSocket connected')
-  }
+    try {
+      // 🔥 重點：先取得 WebSocket token
+      const tokenResponse = await axios.get('http://localhost:3000/api/v1/auth/ws_token', {
+        withCredentials: true
+      })
+      
+      const wsToken = tokenResponse.data.token
+      
+      // 建立 WebSocket 連線，帶上 token
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/cable'
+      this.consumer = createConsumer(`${wsUrl}?token=${wsToken}`)
 
-  // 訂閱頻道
-  subscribe(channelName, params = {}, callbacks = {}) {
-    if (!this.cable) {
-      console.error('WebSocket not connected')
-      return null
-    }
+      console.log(`🔌 連接 WebSocket: game_${roomId}`)
 
-    const subscription = this.cable.subscriptions.create(
-      { channel: channelName, ...params },
-      {
-        connected: () => {
-          console.log(`Connected to ${channelName}`)
-          callbacks.connected?.()
+      // 訂閱頻道
+      this.subscription = this.consumer.subscriptions.create(
+        {
+          channel: 'GameChannel',
+          room_id: roomId
         },
-        disconnected: () => {
-          console.log(`Disconnected from ${channelName}`)
-          callbacks.disconnected?.()
-        },
-        received: (data) => {
-          callbacks.received?.(data)
+        {
+          connected: () => {
+            console.log('✅ WebSocket 連線成功')
+            this.trigger('connected')
+          },
+
+          disconnected: () => {
+            console.log('❌ WebSocket 斷線')
+            this.trigger('disconnected')
+          },
+
+          received: (data) => {
+            console.log('📨 收到訊息:', data)
+            
+            // 根據訊息類型觸發不同的回調
+            if (data.type === 'game_update') {
+              this.trigger('gameUpdate', data)
+            } else if (data.type === 'player_joined') {
+              this.trigger('playerJoined', data)
+            } else if (data.type === 'player_left') {
+              this.trigger('playerLeft', data)
+            }
+          }
         }
-      }
-    )
+      )
 
-    this.subscriptions[channelName] = subscription
-    return subscription
-  }
-
-  // 取消訂閱
-  unsubscribe(channelName) {
-    if (this.subscriptions[channelName]) {
-      this.subscriptions[channelName].unsubscribe()
-      delete this.subscriptions[channelName]
+      return this.subscription
+    } catch (error) {
+      console.error('❌ WebSocket 連線失敗:', error)
+      throw error
     }
   }
 
-  // 斷開連接
   disconnect() {
-    if (this.cable) {
-      this.cable.disconnect()
-      this.cable = null
-      this.subscriptions = {}
-      console.log('WebSocket disconnected')
+    if (this.subscription) {
+      this.subscription.unsubscribe()
+      this.subscription = null
     }
+    
+    if (this.consumer) {
+      this.consumer.disconnect()
+      this.consumer = null
+    }
+    
+    this.callbacks = {}
+    console.log('🔌 WebSocket 已斷線')
+  }
+
+  // 註冊事件回調
+  on(event, callback) {
+    if (!this.callbacks[event]) {
+      this.callbacks[event] = []
+    }
+    this.callbacks[event].push(callback)
+  }
+
+  // 移除事件回調
+  off(event, callback) {
+    if (!this.callbacks[event]) return
+    
+    if (callback) {
+      this.callbacks[event] = this.callbacks[event].filter(cb => cb !== callback)
+    } else {
+      delete this.callbacks[event]
+    }
+  }
+
+  // 觸發事件
+  trigger(event, data) {
+    if (!this.callbacks[event]) return
+    
+    this.callbacks[event].forEach(callback => {
+      try {
+        callback(data)
+      } catch (error) {
+        console.error(`事件 ${event} 回調錯誤:`, error)
+      }
+    })
   }
 }
 
+// 單例模式
 export default new WebSocketService()

@@ -37,7 +37,18 @@ class AuthService {
     }
   }
 
-  // 更新個人資料（新增這個方法）
+  // 取得 WebSocket Token
+  async getWebSocketToken() {
+    try {
+      const response = await axios.get(`${API_URL}/auth/ws_token`)
+      return response.data.token
+    } catch (error) {
+      console.error('Get WS token failed:', error)
+      throw error
+    }
+  }
+
+  // 更新個人資料
   async updateProfile(profileData) {
     try {
       const response = await axios.patch(`${API_URL}/users/profile`, {

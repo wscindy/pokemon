@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gameAPI } from '@/services/api'
+import websocketService from '@/services/websocket'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,6 +162,67 @@ const loadGameState = async () => {
   }
 }
 
+    // WebSocket 事件處理
+const handleGameUpdate = (data) => {
+  console.log('🔄 收到遊戲更新:', data)
+  
+  if (data.game_states) {
+    const myUserId = gameState.value?.current_player_id
+    
+    if (myUserId && data.game_states[myUserId]) {
+      gameState.value = {
+        ...data.game_states[myUserId],
+        stadium_cards: data.game_states[myUserId].stadium_cards || []
+      }
+    }
+  }
+  
+  const isMe = data.user_id === gameState.value?.current_player_id
+  const playerName = isMe ? '你' : (data.user_name || '對手')
+  
+  let message = ''
+  
+  switch(data.action) {
+    case 'card_played':
+      message = `${playerName}打出了卡片`
+      break
+    case 'energy_attached':
+      message = `${playerName}附加了能量`
+      break
+    case 'card_moved':
+      message = `${playerName}移動了卡片`
+      break
+    case 'damage_updated':
+      const diff = (data.data?.new_damage || 0) - (data.data?.old_damage || 0)
+      message = `${playerName}更新了傷害 (${diff > 0 ? '+' : ''}${diff})`
+      break
+    case 'turn_ended':
+      message = `${playerName}結束了回合`
+      break
+    case 'cards_drawn':
+      message = `${playerName}抽了 ${data.data?.count || 0} 張牌`
+      break
+    default:
+      message = `${playerName}執行了操作`
+  }
+  
+  addLog(message, isMe ? 'player' : 'opponent')
+}
+
+const handlePlayerJoined = () => {
+  loadGameState()
+}
+
+const connectWebSocket = async () => {
+  try {
+    await websocketService.connect(gameStateId.value)
+    websocketService.on('gameUpdate', handleGameUpdate)
+    websocketService.on('playerJoined', handlePlayerJoined)
+  } catch (err) {
+    console.error('WebSocket 連線失敗:', err)
+  }
+}
+
 // 點擊手牌
 const handleCardClick = (card) => {
   selectedCard.value = card
@@ -180,10 +242,8 @@ const playToActive = async () => {
     addLog(`${selectedCard.value.name} 打到戰鬥場`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('寶可夢已打到戰鬥場！')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 打出寶可夢到備戰區
@@ -195,10 +255,8 @@ const playToBench = async () => {
     addLog(`${selectedCard.value.name} 打到備戰區`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('寶可夢已打到備戰區！')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 打出競技場卡
@@ -215,11 +273,9 @@ const playStadiumCard = async () => {
     addLog(`${selectedCard.value.name} 打到競技場`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('競技場卡已打出！')
-  } catch (err) {
+      } catch (err) {
     console.error('打出競技場卡失敗:', err)
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 打出支援者卡（直接丟到棄牌堆）
@@ -235,11 +291,9 @@ const playSupporterCard = async () => {
     addLog(`${selectedCard.value.name} 使用並丟到棄牌堆`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('支援者卡已使用！')
-  } catch (err) {
+      } catch (err) {
     console.error('打出支援者卡失敗:', err)
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 準備附加能量
@@ -290,10 +344,8 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
     addLog(`${energyCard.name} 附加到 ${getDisplayCard(pokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('能量附加成功！')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 疊加卡牌
@@ -303,10 +355,8 @@ const stackCardOnPokemon = async (card, targetPokemon) => {
     addLog(`${card.name} 疊加到 ${getDisplayCard(targetPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('疊加成功！')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 移動卡牌
@@ -325,10 +375,8 @@ const moveCardTo = async (card, toZone, toPosition = null) => {
     addLog(`${card.name} 移到 ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert(`已移到${zoneNames[toZone]}`)
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 點擊競技場卡
@@ -372,11 +420,9 @@ const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
     
     await loadGameState()
     cancelSelection()
-    alert(`已移到${playerName}${zoneNames[targetZone]}`)
-  } catch (err) {
+      } catch (err) {
     console.error('移動競技場卡失敗:', err)
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 調整傷害
@@ -388,8 +434,7 @@ const adjustDamage = async (pokemon, amount) => {
     addLog(`${getDisplayCard(pokemon).name} ${amount > 0 ? '+' : ''}${amount} 傷害 (${newDamage})`, 'info')
     await loadGameState()
   } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 更新傷害
@@ -398,8 +443,7 @@ const updateDamage = async (pokemon) => {
     await gameAPI.updateDamage(gameStateId.value, pokemon.id, pokemon.damage_taken)
     await loadGameState()
   } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 選擇能量轉移
@@ -423,10 +467,8 @@ const transferEnergyToPokemon = async (energyData, toPokemon) => {
     addLog(`${energyData.name} 從 ${getDisplayCard(energyData.fromPokemon).name} 轉移到 ${getDisplayCard(toPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert('能量轉移成功！')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 移動能量到其他區域
@@ -449,10 +491,8 @@ const moveEnergyTo = async (energyData, toZone) => {
     addLog(`${energyData.name} 移到 ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
-    alert(`已移到${zoneNames[toZone]}`)
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 點擊牌庫
@@ -473,6 +513,17 @@ const handleDiscardClick = () => {
 const handlePrizeClick = () => {
   selectedDeckZone.value = 'prize'
   selectedMode.value = 'deckoperation'
+  drawCount.value = 6  // 🔥 預設 6 張
+}
+
+// 設定獎勵卡（從牌庫移到獎勵卡區）
+const setPrizeCards = async () => {
+  try {
+    await gameAPI.setPrizeCards(gameStateId.value, drawCount.value)
+    cancelSelection()
+  } catch (err) {
+    console.error('設定獎勵卡失敗:', err)
+  }
 }
 
 // 從牌庫抽牌
@@ -482,10 +533,8 @@ const drawFromDeck = async () => {
     addLog(`抽了 ${drawCount.value} 張牌`, 'player')
     await loadGameState()
     cancelSelection()
-    alert(response.data.message)
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 從棄牌堆撿牌
@@ -499,11 +548,9 @@ const pickFromDiscard = async () => {
     addLog(`從棄牌堆撿了 ${actualCount} 張牌`, 'player')
     await loadGameState()
     cancelSelection()
-    alert(`從棄牌堆撿了 ${actualCount} 張牌`)
-  } catch (err) {
+      } catch (err) {
     console.error('從棄牌堆撿牌失敗:', err)
-    alert(err.response?.data?.error || err.message)
-  }
+      }
 }
 
 // 領取獎勵卡
@@ -513,10 +560,8 @@ const takePrizeCard = async () => {
     addLog('領取了 1 張獎勵卡', 'player')
     await loadGameState()
     cancelSelection()
-    alert(response.data.message)
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 結束回合
@@ -525,10 +570,8 @@ const confirmTurn = async () => {
     await gameAPI.endTurn(gameStateId.value)
     addLog('回合結束', 'system')
     await loadGameState()
-    alert('回合已結束，輪到對手了')
-  } catch (err) {
-    alert(err.response?.data?.error || err.message)
-  }
+      } catch (err) {
+      }
 }
 
 // 取消選擇
@@ -544,13 +587,18 @@ const cancelSelection = () => {
   drawCount.value = 1
 }
 
-onMounted(() => {
+onMounted(async () => {
   console.log('🚀 GameBoard mounted, Room ID:', gameStateId.value)
-  loadGameState()
+  await loadGameState()
+  await connectWebSocket()
   addLog('遊戲開始', 'system')
 })
 
-
+onUnmounted(() => {
+  websocketService.off('gameUpdate', handleGameUpdate)
+  websocketService.off('playerJoined', handlePlayerJoined)
+  websocketService.disconnect()
+})
 </script>
 
 <template>
@@ -990,8 +1038,8 @@ onMounted(() => {
                 <h4>獎勵卡</h4>
                 <div
                   class="deck-stack prize"
-                  :class="{ clickable: gameState.prize_count > 0 }"
-                  @click="gameState.prize_count > 0 && handlePrizeClick()"
+                  :class="{ clickable: true }"
+                  @click="gameState.deck_count > 0 && handlePrizeClick()"
                 >
                   <span class="deck-count">{{ gameState.prize_count || 0 }}</span>
                 </div>
@@ -1271,17 +1319,18 @@ onMounted(() => {
         </div>
         
         <!-- 獎勵卡 -->
-        <div v-if="selectedDeckZone === 'prize'" class="action-content">
-          <p class="info-text">擊敗對手的寶可夢時可以領取獎勵卡</p>
-          
-          <div class="action-buttons">
-            <button @click="takePrizeCard" class="action-btn primary">
-              領取獎勵卡
-            </button>
-            
-            <button @click="cancelSelection" class="action-btn cancel">取消</button>
-          </div>
-        </div>
+          <div v-if="selectedDeckZone === 'prize'" class="action-content">
+    <div class="draw-count-selector">
+      <label>從牌庫移幾張到獎勵卡？</label>
+      <div class="count-controls">
+        <button @click="drawCount = Math.max(1, drawCount - 1)" class="count-btn">-</button>
+        <input type="number" v-model.number="drawCount" min="1" max="10" class="count-input" />
+        <button @click="drawCount = Math.min(10, drawCount + 1)" class="count-btn">+</button>
+      </div>
+    </div>
+    <button @click="setPrizeCards" class="action-btn primary">確認設定</button>
+    <button @click="cancelSelection" class="action-btn cancel">取消</button>
+  </div>
       </div>
     </div>
   </div>
