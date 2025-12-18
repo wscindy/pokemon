@@ -1,5 +1,6 @@
+# app/controllers/api/v1/auth_controller.rb
 class Api::V1::AuthController < ApplicationController
-  before_action :authenticate_user_from_token!, only: [:me, :logout]
+  before_action :authenticate_user_from_token!, only: [:me, :logout, :ws_token]
   # skip_before_action :verify_authenticity_token
 
   # POST /api/v1/auth/google
@@ -60,9 +61,6 @@ class Api::V1::AuthController < ApplicationController
     render json: { error: 'Authentication failed', message: e.message }, status: :internal_server_error
   end
 
-
-
-
   # POST /api/v1/auth/refresh
   def refresh
     refresh_token = cookies.signed[:refresh_token] || params[:refresh_token]
@@ -105,6 +103,37 @@ class Api::V1::AuthController < ApplicationController
   # GET /api/v1/auth/me
   def me
     render json: { user: user_json(@current_user) }, status: :ok
+  end
+
+  # 🔥 新增：GET /api/v1/auth/ws_token
+  # 用於 WebSocket 連線時取得 token
+  def ws_token
+    # 從 cookie 或 header 取得現有的 JWT token
+    token = cookies.signed[:jwt] || 
+            request.headers['Authorization']&.split(' ')&.last
+
+    unless token
+      return render json: { error: 'No token provided' }, status: :unauthorized
+    end
+
+    # 驗證 token 是否有效
+    decoded = JsonWebToken.decode(token)
+    unless decoded
+      return render json: { error: 'Invalid or expired token' }, status: :unauthorized
+    end
+
+    # 確認用戶存在
+    user = User.find_by(id: decoded[:user_id])
+    unless user
+      return render json: { error: 'User not found' }, status: :unauthorized
+    end
+
+    # 返回 token 供 WebSocket 使用
+    render json: { 
+      token: token,
+      user_id: user.id,
+      expires_at: 24.hours.from_now.iso8601
+    }, status: :ok
   end
 
   private

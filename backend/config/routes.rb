@@ -10,6 +10,7 @@ Rails.application.routes.draw do
       post 'auth/refresh', to: 'auth#refresh'
       delete 'auth/logout', to: 'auth#logout'
       get 'auth/me', to: 'auth#me'
+      get 'auth/ws_token', to: 'auth#ws_token' 
 
       # User profile
       patch 'users/profile', to: 'users#update_profile'
@@ -47,6 +48,7 @@ Rails.application.routes.draw do
       post 'games/:id/pick_from_discard', to: 'games#pick_from_discard'
       post 'games/:id/take_prize', to: 'games#take_prize'
       post 'games/:id/move_stadium_card', to: 'games#move_stadium_card'
+      post 'games/:id/set_prize_cards', to: 'games#set_prize_cards'
     end
   end
 

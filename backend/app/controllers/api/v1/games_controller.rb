@@ -30,6 +30,11 @@ module Api
         result = GameSetupService.new(@game_state).call
 
         if result[:success]
+          # 🔥 廣播遊戲開始
+          broadcast_game_update('game_setup', {
+            message: '發牌完成'
+          })
+          
           render json: {
             message: "發牌完成",
             game_state: game_state_json(@game_state)
@@ -94,6 +99,14 @@ module Api
         
         game_card.reload
         
+        # 🔥 廣播出牌動作
+        broadcast_game_update('card_played', {
+          card_id: game_card.id,
+          zone: zone,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+        
         render json: { 
           message: '出牌成功',
           game_card: game_card.as_json(include: [:attached_cards, :stacked_cards]),
@@ -123,6 +136,14 @@ module Api
           attached_to_game_card_id: target_pokemon.id
         )
 
+        # 🔥 廣播能量附加
+        broadcast_game_update('energy_attached', {
+          energy_id: energy_card.id,
+          target_pokemon_id: target_pokemon.id,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+
         render json: {
           message: '能量附加成功',
           game_state: game_state_json(@game_state.reload)
@@ -144,6 +165,15 @@ module Api
           zone: params[:to_zone],
           zone_position: params[:to_position]
         )
+
+        # 🔥 廣播卡牌移動
+        broadcast_game_update('card_moved', {
+          card_id: card.id,
+          from_zone: card.zone_was,
+          to_zone: params[:to_zone],
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: '移動成功',
@@ -172,6 +202,14 @@ module Api
           parent_card_id: target.id
         )
 
+        # 🔥 廣播卡牌疊加
+        broadcast_game_update('card_stacked', {
+          card_id: card.id,
+          target_card_id: target.id,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+
         render json: {
           message: '疊加成功',
           game_state: game_state_json(@game_state.reload)
@@ -189,7 +227,17 @@ module Api
           return render json: { error: '找不到寶可夢' }, status: :not_found
         end
 
+        old_damage = pokemon.damage_taken
         pokemon.update!(damage_taken: params[:damage_taken])
+
+        # 🔥 廣播傷害更新
+        broadcast_game_update('damage_updated', {
+          pokemon_id: pokemon.id,
+          old_damage: old_damage,
+          new_damage: params[:damage_taken],
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: "傷害已更新",
@@ -217,6 +265,16 @@ module Api
           )
         end
 
+        # 🔥 廣播能量轉移
+        broadcast_game_update('energy_transferred', {
+          energy_id: energy.id,
+          from_pokemon_id: params[:from_pokemon_id],
+          to_pokemon_id: params[:to_pokemon_id],
+          to_zone: params[:to_zone],
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+
         render json: {
           message: '能量轉移成功',
           game_state: game_state_json(@game_state.reload)
@@ -225,11 +283,22 @@ module Api
 
       # 結束回合
       def end_turn
+        old_turn_user = @game_state.current_turn_user_id
+        
         @game_state.update!(
           current_turn_user_id: @game_state.current_turn_user_id == @game_state.player1_id ? 
                                 @game_state.player2_id : @game_state.player1_id,
           round_number: @game_state.round_number + 1
         )
+
+        # 🔥 廣播回合結束
+        broadcast_game_update('turn_ended', {
+          old_turn_user_id: old_turn_user,
+          next_turn_user_id: @game_state.current_turn_user_id,
+          round_number: @game_state.round_number,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: '回合結束',
@@ -247,6 +316,13 @@ module Api
 
         deck_cards.update_all(zone: 'hand', zone_position: nil)
 
+        # 🔥 廣播抽牌
+        broadcast_game_update('cards_drawn', {
+          count: deck_cards.count,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
+
         render json: {
           message: "抽了 #{deck_cards.count} 張牌",
           game_state: game_state_json(@game_state.reload)
@@ -262,6 +338,13 @@ module Api
           .limit(count)
 
         discard_cards.update_all(zone: 'hand', zone_position: nil)
+
+        # 🔥 廣播從棄牌堆撿牌
+        broadcast_game_update('cards_picked_from_discard', {
+          count: discard_cards.count,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: "從棄牌堆撿了 #{discard_cards.count} 張牌",
@@ -281,6 +364,13 @@ module Api
         end
 
         prize_card.update!(zone: 'hand', zone_position: nil)
+
+        # 🔥 廣播領取獎勵卡
+        broadcast_game_update('prize_taken', {
+          card_id: prize_card.id,
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: '領取獎勵卡成功',
@@ -311,6 +401,15 @@ module Api
           user_id: target_user.id,
           zone_position: nil
         )
+
+        # 🔥 廣播競技場卡移動
+        broadcast_game_update('stadium_card_moved', {
+          card_id: card.id,
+          target_zone: params[:target_zone],
+          player_id: params[:player_id],
+          user_id: @current_user.id,
+          user_name: @current_user.name
+        })
 
         render json: {
           message: '競技場卡移動成功',
@@ -384,6 +483,59 @@ module Api
             hint: '請確認房間號碼是否正確，或嘗試重新建立房間'
           }, status: :not_found
         end
+      end
+
+      # 廣播遊戲更新的方法
+      def broadcast_game_update(action, data = {})
+        return unless @game_state
+        
+        room_id = @game_state.room_id
+        current_user_id = @current_user.id
+        
+        # 找出對手 ID
+        opponent_id = if @game_state.player1_id == current_user_id
+          @game_state.player2_id
+        else
+          @game_state.player1_id
+        end
+        
+        Rails.logger.info "📡 廣播遊戲更新: #{action} to game_#{room_id}"
+        Rails.logger.info "👤 當前玩家: #{current_user_id}, 對手: #{opponent_id}"
+        
+        # 🔥 分別產生兩個視角的遊戲狀態
+        # 先備份原本的 @current_user，因為 game_state_json 會用到
+        original_user = @current_user
+        
+        # 產生當前玩家的視角
+        @current_user = User.find(current_user_id)
+        current_player_state = game_state_json(@game_state)
+        
+        # 產生對手的視角
+        opponent_state = if opponent_id
+          @current_user = User.find(opponent_id)
+          game_state_json(@game_state)
+        else
+          nil
+        end
+        
+        # 還原 @current_user
+        @current_user = original_user
+        
+        # 廣播包含兩個視角的資料
+        ActionCable.server.broadcast(
+          "game_#{room_id}",
+          {
+            type: 'game_update',
+            action: action,
+            user_id: current_user_id,
+            user_name: original_user.name,
+            data: data,
+            game_states: {
+              current_user_id => current_player_state,
+              opponent_id => opponent_state
+            }.compact
+          }
+        )
       end
 
       def game_state_json(game_state)
