@@ -3,5 +3,11 @@ frontend/vue-project/dist
 backend/log
 backend/tmp
 backend/node_modules
+backend/.env
+backend/.env.*
+backend/config/master.key
+backend/config/credentials.yml.enc
 .git
 PTCG-database
+Documents
+.ruby-lsp

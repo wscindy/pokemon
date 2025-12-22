@@ -35,3 +35,8 @@ dist/
 build/
 EOF
 
+
+backend/.env
+backend/.env.*
+backend/config/master.key
+backend/config/credentials.yml.enc
