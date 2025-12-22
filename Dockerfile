@@ -7,18 +7,17 @@ RUN apt-get update -qq && \
 
 WORKDIR /app
 
+# 複製整個專案
+COPY . .
+
 # 建置前端
-COPY frontend/vue-project/package*.json ./frontend/vue-project/
 WORKDIR /app/frontend/vue-project
 RUN npm install
-COPY frontend/vue-project ./
 RUN npm run build
 
 # 設定後端
 WORKDIR /app/backend
-COPY backend/Gemfile backend/Gemfile.lock ./
 RUN bundle install
-COPY backend ./
 
 # 複製前端產物到 Rails public
 RUN cp -r /app/frontend/vue-project/dist/* ./public/
