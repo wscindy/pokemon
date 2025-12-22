@@ -1,0 +1,7 @@
+frontend/vue-project/node_modules
+frontend/vue-project/dist
+backend/log
+backend/tmp
+backend/node_modules
+.git
+PTCG-database
