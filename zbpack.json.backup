@@ -1,4 +1,0 @@
-{
-  "build_command": "cd frontend/vue-project && npm install && npm run build && cp -r dist/* ../../backend/public/ && cd backend && bundle install && RAILS_ENV=production SECRET_KEY_BASE=precompile_placeholder bundle exec rake assets:precompile",
-  "start_command": "cd backend && bundle exec rails server -b 0.0.0.0 -p $PORT -e production"
-}
