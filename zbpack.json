@@ -1,0 +1,6 @@
+{
+  "framework": "rails",
+  "app_dir": "backend",
+  "build_command": "cd frontend/vue-project && npm install && npm run build && cp -r dist/* ../../backend/public/ && cd backend && bundle install",
+  "start_command": "cd backend && bundle exec rails server -b 0.0.0.0 -p $PORT -e production"
+}
