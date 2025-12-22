@@ -7,6 +7,8 @@ backend/.env
 backend/.env.*
 backend/config/master.key
 backend/config/credentials.yml.enc
+backend/config/deploy.yml
+backend/.kamal
 .git
 PTCG-database
 Documents
