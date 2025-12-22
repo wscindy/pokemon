@@ -163,6 +163,7 @@ const loadGameState = async () => {
 }
 
     // WebSocket 事件處理
+// WebSocket 事件處理
 const handleGameUpdate = (data) => {
   console.log('🔄 收到遊戲更新:', data)
   
@@ -184,30 +185,81 @@ const handleGameUpdate = (data) => {
   
   switch(data.action) {
     case 'card_played':
-      message = `${playerName}打出了卡片`
+      const cardName = data.data?.card_name || '卡片'
+      const zoneName = data.data?.zone_display || data.data?.zone || '場上'
+      message = `${playerName} 打出了 ${cardName} 到 ${zoneName}`
       break
+      
     case 'energy_attached':
-      message = `${playerName}附加了能量`
+      const energyName = data.data?.energy_name || '能量'
+      const targetPokemonName = data.data?.target_pokemon_name || '寶可夢'
+      message = `${playerName}附加了${energyName} 到 ${targetPokemonName}`
       break
+      
     case 'card_moved':
-      message = `${playerName}移動了卡片`
+      const movedCardName = data.data?.card_name || '卡片'
+      const fromZone = data.data?.from_zone_display || data.data?.from_zone || '原位置'
+      const toZone = data.data?.to_zone_display || data.data?.to_zone || '新位置'
+      message = `${playerName} 將 ${movedCardName} 從 ${fromZone} 移到 ${toZone}`
       break
+      
+    case 'card_stacked':
+      const stackedCard = data.data?.card_name || '卡片'
+      const stackTarget = data.data?.target_card_name || '寶可夢'
+      message = `${playerName} 將 ${stackedCard} 疊加到 ${stackTarget}`
+      break
+      
     case 'damage_updated':
+      const pokemonName = data.data?.pokemon_name || '寶可夢'
       const diff = (data.data?.new_damage || 0) - (data.data?.old_damage || 0)
-      message = `${playerName}更新了傷害 (${diff > 0 ? '+' : ''}${diff})`
+      message = `${playerName} 更新了 ${pokemonName} 的傷害  (${diff > 0 ? '+' : ''}${diff})`
       break
+      
+    case 'energy_transferred':
+      const transferredEnergy = data.data?.energy_name || '能量'
+      const fromPokemon = data.data?.from_pokemon_name || '寶可夢'
+      if (data.data?.to_pokemon_name) {
+        message = `${playerName} 將 ${transferredEnergy} 從 ${fromPokemon} 轉移到 ${data.data.to_pokemon_name}`
+      } else if (data.data?.to_zone_display) {
+        message = `${playerName} 將 ${transferredEnergy} 從 ${fromPokemon} 移到 ${data.data.to_zone_display}`
+      }
+      break
+      
     case 'turn_ended':
       message = `${playerName}結束了回合`
       break
+      
     case 'cards_drawn':
       message = `${playerName}抽了 ${data.data?.count || 0} 張牌`
       break
+      
+    case 'cards_picked_from_discard':
+      message = `${playerName}從棄牌堆撿了 ${data.data?.count || 0} 張牌`
+      break
+      
+    case 'prize_taken':
+      const prizeCard = data.data?.card_name || '獎勵卡'
+      message = `${playerName}領取了${prizeCard}`
+      break
+      
+    case 'stadium_card_moved':
+      const stadiumCard = data.data?.card_name || '競技場卡'
+      const targetPlayer = data.data?.player_id === gameState.value?.current_player_id ? '自己' : '對手'
+      const targetZoneDisplay = data.data?.target_zone_display || '位置'
+      message = `${playerName} 將 ${stadiumCard} 移到 ${targetPlayer}的${targetZoneDisplay}`
+      break
+      
+    case 'prize_cards_set':
+      message = `${playerName}設定了 ${data.data?.count || 0} 張獎勵卡`
+      break
+      
     default:
       message = `${playerName}執行了操作`
   }
   
   addLog(message, isMe ? 'player' : 'opponent')
 }
+
 
 const handlePlayerJoined = () => {
   loadGameState()
@@ -270,7 +322,7 @@ const playStadiumCard = async () => {
     const response = await gameAPI.playCard(gameStateId.value, selectedCard.value.id, 'stadium')
     console.log('競技場卡已打出:', response.data)
     
-    addLog(`${selectedCard.value.name} 打到競技場`, 'player')
+    // addLog(`${selectedCard.value.name} 打到競技場`, 'player')
     await loadGameState()
     cancelSelection()
       } catch (err) {
@@ -352,7 +404,7 @@ const attachEnergyToPokemon = async (energyCard, pokemon) => {
 const stackCardOnPokemon = async (card, targetPokemon) => {
   try {
     await gameAPI.stackCard(gameStateId.value, card.id, targetPokemon.id)
-    addLog(`${card.name} 疊加到 ${getDisplayCard(targetPokemon).name}`, 'player')
+    addLog(`${card.name}  疊加到  ${getDisplayCard(targetPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
       } catch (err) {
@@ -372,7 +424,7 @@ const moveCardTo = async (card, toZone, toPosition = null) => {
       bench: '備戰區'
     }
     
-    addLog(`${card.name} 移到 ${zoneNames[toZone]}`, 'player')
+    addLog(`${card.name}  移到  ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
       } catch (err) {
@@ -416,7 +468,7 @@ const moveStadiumCardTo = async (targetZone, targetPlayerId = null) => {
     }
     
     const playerName = playerId === gameState.value.current_player_id ? '自己的' : '對手的'
-    addLog(`${selectedStadiumCard.value.name} 移到 ${playerName}${zoneNames[targetZone]}`, 'system')
+    addLog(`${selectedStadiumCard.value.name}  移到  ${playerName}${zoneNames[targetZone]}`, 'system')
     
     await loadGameState()
     cancelSelection()
@@ -464,7 +516,7 @@ const transferEnergyToPokemon = async (energyData, toPokemon) => {
       null
     )
     
-    addLog(`${energyData.name} 從 ${getDisplayCard(energyData.fromPokemon).name} 轉移到 ${getDisplayCard(toPokemon).name}`, 'player')
+    addLog(`${energyData.name}  從  ${getDisplayCard(energyData.fromPokemon).name}  轉移到  ${getDisplayCard(toPokemon).name}`, 'player')
     await loadGameState()
     cancelSelection()
       } catch (err) {
@@ -488,7 +540,7 @@ const moveEnergyTo = async (energyData, toZone) => {
       deck: '牌庫'
     }
     
-    addLog(`${energyData.name} 移到 ${zoneNames[toZone]}`, 'player')
+    addLog(`${energyData.name}  移到  ${zoneNames[toZone]}`, 'player')
     await loadGameState()
     cancelSelection()
       } catch (err) {
