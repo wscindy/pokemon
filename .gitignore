@@ -40,3 +40,13 @@ backend/.env
 backend/.env.*
 backend/config/master.key
 backend/config/credentials.yml.enc
+
+# Sensitive files
+backend/.kamal/secrets
+backend/.kamal/secrets*
+backend/config/master.key
+backend/.env
+backend/.env.*
+frontend/vue-project/.env.development
+frontend/vue-project/.env.production
+frontend/vue-project/.env.local
