@@ -5,22 +5,11 @@
 
 # Read more: https://github.com/cyu/rack-cors
 
-# Rails.application.config.middleware.insert_before 0, Rack::Cors do
-#   allow do
-#     origins "example.com"
-#
-#     resource "*",
-#       headers: :any,
-#       methods: [:get, :post, :put, :patch, :delete, :options, :head]
-#   end
-# end
-
-
 # config/initializers/cors.rb
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    # 允許來自 Vue 前端的請求
-    origins 'http://localhost:5173', 'http://127.0.0.1:5173'
+    # 從環境變數讀取允許的 origins，支援多個 domain（用逗號分隔）
+    origins ENV.fetch('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
     
     resource '*',
       headers: :any,
