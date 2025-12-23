@@ -1,7 +1,7 @@
 // src/services/api.js
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 // 🔥 建立兩個不同的 axios instance
 // 1. 用於 Cookie-based Auth（Google 登入）

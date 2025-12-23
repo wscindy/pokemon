@@ -2,6 +2,8 @@
 import { createConsumer } from '@rails/actioncable'
 import axios from 'axios'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL
+
 class WebSocketService {
   constructor() {
     this.consumer = null
@@ -17,14 +19,14 @@ class WebSocketService {
 
     try {
       // 🔥 重點：先取得 WebSocket token
-      const tokenResponse = await axios.get('http://localhost:3000/api/v1/auth/ws_token', {
+      const tokenResponse = await axios.get(`${API_BASE_URL}/api/v1/auth/ws_token`, {
         withCredentials: true
       })
       
       const wsToken = tokenResponse.data.token
       
       // 建立 WebSocket 連線，帶上 token
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/cable'
+      const wsUrl = import.meta.env.VITE_WS_URL
       this.consumer = createConsumer(`${wsUrl}?token=${wsToken}`)
 
       console.log(`🔌 連接 WebSocket: game_${roomId}`)

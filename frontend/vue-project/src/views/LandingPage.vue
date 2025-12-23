@@ -6,6 +6,7 @@ import websocketService from '@/services/websocket'
 
 const router = useRouter()
 const isLoading = ref(false)
+const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL
 
 // Google 登入處理（改用彈窗流程）
 const handleGoogleLogin = () => {
@@ -13,7 +14,7 @@ const handleGoogleLogin = () => {
   
   // 使用 Google OAuth 2.0 彈窗流程
   const clientId = '492452439420-92olit1oung11aun1qh5kaagsr8hi83u.apps.googleusercontent.com'
-  const redirectUri = 'http://localhost:5173/auth/callback'
+  const redirectUri = `${FRONTEND_URL}/auth/callback`
   const scope = 'email profile'
   
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
