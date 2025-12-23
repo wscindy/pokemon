@@ -2,17 +2,18 @@ default: &default
   adapter: postgresql
   encoding: unicode
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  username: postgres
+  username: liweixuan
   password: <%= ENV.fetch("POSTGRES_PASSWORD", "postgres123") %>
   host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+  # port: 5432
 
 development:
   <<: *default
-  database: pokemon_development
+  database: pokemon_tcg_development
 
 test:
   <<: *default
-  database: pokemon_test
+  database: pokemon_tcg_test
 
 production:
   primary: &primary_production
