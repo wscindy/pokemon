@@ -10,6 +10,9 @@ class WebSocketService {
   }
 
   async connect(roomId) {
+      console.trace('🔍 WebSocket.connect 被呼叫')
+      console.log('📍 傳入的 roomId:', roomId, '型別:', typeof roomId)
+
     if (this.subscription) {
       console.log('⚠️ 已經連線，先斷線')
       this.disconnect()
