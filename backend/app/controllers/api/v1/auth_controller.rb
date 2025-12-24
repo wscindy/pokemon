@@ -164,7 +164,7 @@ class Api::V1::AuthController < ApplicationController
       value: access_token,
       httponly: true,
       secure: Rails.env.production?,
-      same_site: :lax,
+      same_site: Rails.env.production? ? :none : :lax,
       expires: 24.hours.from_now
     }
 
@@ -172,7 +172,7 @@ class Api::V1::AuthController < ApplicationController
       value: refresh_token,
       httponly: true,
       secure: Rails.env.production?,
-      same_site: :lax,
+      same_site: Rails.env.production? ? :none : :lax,
       expires: 30.days.from_now
     }
   end

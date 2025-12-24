@@ -9,7 +9,7 @@
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
     # 從環境變數讀取允許的 origins，支援多個 domain（用逗號分隔）
-    origins ENV.fetch('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
+    origins ENV.fetch('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,https://pokemonww.zeabur.app,https://pokemonww-api.zeabur.app').split(',')
     
     resource '*',
       headers: :any,
