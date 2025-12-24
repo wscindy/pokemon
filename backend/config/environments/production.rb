@@ -86,4 +86,27 @@ Rails.application.configure do
   #
   # Skip DNS rebinding protection for the default health check endpoint.
   # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+
+  # ==================== ActionCable 設定 ====================
+  # WebSocket URL (使用 wss:// 因為你有 force_ssl)
+  config.action_cable.url = "wss://pokemonww.zeabur.app/cable"
+  
+  # 允許的來源 (CORS for WebSocket)
+  config.action_cable.allowed_request_origins = [
+    'https://pokemonww.zeabur.app',
+    /https:\/\/.*\.zeabur\.app/
+  ]
+  
+  # 如果前端網域不同，加入前端網域
+  if ENV['FRONTEND_URL'].present?
+    config.action_cable.allowed_request_origins << ENV['FRONTEND_URL']
+  end
+  
+  # 掛載路徑 (預設是 /cable，通常不需要改)
+  config.action_cable.mount_path = '/cable'
+  
+  # 是否在同一個 process 中運行 (solid_cable 建議設為 nil 或不設定)
+  # config.action_cable.disable_request_forgery_protection = false
+  
+  # ==================== End ActionCable 設定 ====================
 end

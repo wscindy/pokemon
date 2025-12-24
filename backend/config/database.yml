@@ -5,7 +5,6 @@ default: &default
   username: liweixuan
   password: <%= ENV.fetch("POSTGRES_PASSWORD", "postgres123") %>
   host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
-  # port: 5432
 
 development:
   <<: *default
@@ -22,9 +21,12 @@ production:
 
   cache:
     <<: *primary_production
+    migrations_paths: db/cache_migrate
 
   queue:
     <<: *primary_production
+    migrations_paths: db/queue_migrate
 
   cable:
     <<: *primary_production
+    migrations_paths: db/cable_migrate
