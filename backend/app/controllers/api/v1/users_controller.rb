@@ -1,7 +1,7 @@
 module Api
   module V1
     class UsersController < ApplicationController
-      before_action :authenticate_user_from_token!  # ← 🔥 所有方法都需要認證
+      before_action :authenticate_user_from_token!  # 🔥 所有方法都需要認證
       before_action :set_user, only: [:show, :update, :deck, :add_card, :remove_card]
       
       # GET /api/v1/users/:id
