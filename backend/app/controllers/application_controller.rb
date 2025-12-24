@@ -5,9 +5,10 @@ class ApplicationController < ActionController::API
   
   # 🔥 JWT 認證方法（所有 controller 共用）
   def authenticate_user_from_token!
-    token = cookies.signed[:jwt] || 
-            request.headers['Authorization']&.split(' ')&.last
-
+    # 🔥 優先從 Authorization header 讀取
+    token = request.headers['Authorization']&.split(' ')&.last ||
+            cookies.signed[:jwt]
+    
     unless token
       return render json: { error: 'No token provided' }, status: :unauthorized
     end

@@ -117,26 +117,26 @@ module Api
       private
       
       # ✏️ 改用正確的認證方法
-      def authenticate_user_from_token!
-        token = cookies.signed[:jwt] || 
-                request.headers['Authorization']&.split(' ')&.last
+      # def authenticate_user_from_token!
+      #   token = cookies.signed[:jwt] || 
+      #           request.headers['Authorization']&.split(' ')&.last
 
-        unless token
-          return render json: { error: 'No token provided' }, status: :unauthorized
-        end
+      #   unless token
+      #     return render json: { error: 'No token provided' }, status: :unauthorized
+      #   end
 
-        decoded = JsonWebToken.decode(token)
+      #   decoded = JsonWebToken.decode(token)
 
-        unless decoded
-          return render json: { error: 'Invalid or expired token' }, status: :unauthorized
-        end
+      #   unless decoded
+      #     return render json: { error: 'Invalid or expired token' }, status: :unauthorized
+      #   end
 
-        @current_user = User.find_by(id: decoded[:user_id])
+      #   @current_user = User.find_by(id: decoded[:user_id])
 
-        unless @current_user
-          render json: { error: 'User not found' }, status: :unauthorized
-        end
-      end
+      #   unless @current_user
+      #     render json: { error: 'User not found' }, status: :unauthorized
+      #   end
+      # end
     end
   end
 end
