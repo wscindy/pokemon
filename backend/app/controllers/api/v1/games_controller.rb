@@ -622,19 +622,20 @@ module Api
         Rails.logger.info "👤 當前玩家: #{current_user_id}, 對手: #{opponent_id}"
 
         # 🔥 分別產生兩個視角的遊戲狀態
-        # 先備份原本的 @current_user，因為 game_state_json 會用到
         original_user = @current_user
 
         # 產生當前玩家的視角
         @current_user = User.find(current_user_id)
         current_player_state = game_state_json(@game_state)
 
-        # 產生對手的視角
-        opponent_state = if opponent_id
+        # 建立 game_states Hash，只在 opponent_id 存在時才加入對手視角
+        game_states = { current_user_id.to_s => current_player_state }
+        
+        # 產生對手的視角（只在對手存在時）
+        if opponent_id
           @current_user = User.find(opponent_id)
-          game_state_json(@game_state)
-        else
-          nil
+          opponent_state = game_state_json(@game_state)
+          game_states[opponent_id.to_s] = opponent_state
         end
 
         # 還原 @current_user
@@ -649,10 +650,7 @@ module Api
             user_id: current_user_id,
             user_name: original_user.name,
             data: data,
-            game_states: {
-              current_user_id => current_player_state,
-              opponent_id => opponent_state
-            }.compact
+            game_states: game_states
           }
         )
       end
