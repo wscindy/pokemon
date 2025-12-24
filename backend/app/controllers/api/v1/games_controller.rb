@@ -10,28 +10,31 @@ module Api
         :set_prize_cards
       ]
 
-
       # 初始化遊戲
       def initialize_game
+        Rails.logger.info "🎮 初始化遊戲 - User: #{@current_user.email}"
+        
         result = GameInitializerService.new(@current_user).call
 
-
         if result[:success]
+          Rails.logger.info "✅ 遊戲初始化成功 - Room: #{result[:room].id}"
+          
           render json: {
             message: "遊戲初始化成功",
             game_state_id: result[:game_state].id,
             room_id: result[:room].id
           }, status: :created
         else
+          Rails.logger.error "❌ 遊戲初始化失敗: #{result[:error]}"
           render json: { error: result[:error] }, status: :unprocessable_entity
         end
       end
 
-
       # 發牌
       def setup_game
+        Rails.logger.info "🎴 發牌 - Room: #{params[:id]}, User: #{@current_user.email}"
+        
         result = GameSetupService.new(@game_state).call
-
 
         if result[:success]
           # 🔥 廣播遊戲開始
@@ -44,21 +47,23 @@ module Api
             game_state: game_state_json(@game_state)
           }
         else
+          Rails.logger.error "❌ 發牌失敗: #{result[:error]}"
           render json: { error: result[:error] }, status: :unprocessable_entity
         end
       end
 
-
       # 查詢遊戲狀態
       def game_state
+        Rails.logger.info "📊 查詢遊戲狀態 - Room: #{params[:id]}, User: #{@current_user.email}"
         render json: game_state_json(@game_state)
       end
-
 
       # 出牌
       def play_card
         card_id = params[:card_id]
         zone = params[:zone]
+
+        Rails.logger.info "🃏 出牌 - Card: #{card_id}, Zone: #{zone}, User: #{@current_user.email}"
 
         game_card = @game_state.game_cards.find_by(
           id: card_id, 
@@ -67,6 +72,7 @@ module Api
         )
 
         unless game_card
+          Rails.logger.error "❌ 卡片不在手牌中: #{card_id}"
           render json: { error: '卡片不在手牌中或無權操作' }, status: :bad_request
           return
         end
@@ -120,13 +126,14 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 出牌成功 - Card: #{card_data&.name}, Zone: #{zone}"
+
         render json: { 
           message: '出牌成功',
           game_card: game_card.as_json(include: [:attached_cards, :stacked_cards]),
           game_state: game_state_json(@game_state.reload)
         }, status: :ok
       end
-
 
       # 附加能量
       def attach_energy
@@ -141,7 +148,6 @@ module Api
           user_id: @current_user.id
         )
 
-
         unless energy_card && target_pokemon
           return render json: { error: '找不到卡片' }, status: :not_found
         end
@@ -150,12 +156,10 @@ module Api
         energy_data = Card.find_by(card_unique_id: energy_card.card_unique_id)
         pokemon_data = Card.find_by(card_unique_id: target_pokemon.card_unique_id)
 
-
         energy_card.update!(
           zone: 'attached',
           attached_to_game_card_id: target_pokemon.id
         )
-
 
         # 🔥 廣播能量附加（加入卡片名稱）
         broadcast_game_update('energy_attached', {
@@ -167,13 +171,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 能量附加成功 - #{energy_data&.name} → #{pokemon_data&.name}"
 
         render json: {
           message: '能量附加成功',
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       # 移動卡牌
       def move_card
@@ -190,12 +194,10 @@ module Api
         card_data = Card.find_by(card_unique_id: card.card_unique_id)
         from_zone = card.zone
 
-
         card.update!(
           zone: params[:to_zone],
           zone_position: params[:to_position]
         )
-
 
         # 🔥 廣播卡牌移動（加入卡片名稱和位置中文）
         broadcast_game_update('card_moved', {
@@ -209,13 +211,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 卡牌移動 - #{card_data&.name}: #{from_zone} → #{params[:to_zone]}"
 
         render json: {
           message: '移動成功',
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       # 疊加卡牌
       def stack_card
@@ -229,7 +231,6 @@ module Api
           user_id: @current_user.id
         )
 
-
         unless card && target
           return render json: { error: '找不到卡片' }, status: :not_found
         end
@@ -238,12 +239,10 @@ module Api
         card_data = Card.find_by(card_unique_id: card.card_unique_id)
         target_data = Card.find_by(card_unique_id: target.card_unique_id)
 
-
         card.update!(
           zone: 'stacked',
           parent_card_id: target.id
         )
-
 
         # 🔥 廣播卡牌疊加（加入卡片名稱）
         broadcast_game_update('card_stacked', {
@@ -255,6 +254,7 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 卡牌疊加 - #{card_data&.name} → #{target_data&.name}"
 
         render json: {
           message: '疊加成功',
@@ -262,14 +262,12 @@ module Api
         }
       end
 
-
       # 更新傷害
       def update_damage
         pokemon = @game_state.game_cards.find_by(
           id: params[:pokemon_id],
           user_id: @current_user.id
         )
-
 
         unless pokemon
           return render json: { error: '找不到寶可夢' }, status: :not_found
@@ -279,7 +277,6 @@ module Api
         pokemon_data = Card.find_by(card_unique_id: pokemon.card_unique_id)
         old_damage = pokemon.damage_taken
         pokemon.update!(damage_taken: params[:damage_taken])
-
 
         # 🔥 廣播傷害更新（加入寶可夢名稱）
         broadcast_game_update('damage_updated', {
@@ -291,6 +288,7 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 傷害更新 - #{pokemon_data&.name}: #{old_damage} → #{params[:damage_taken]}"
 
         render json: {
           message: "傷害已更新",
@@ -298,14 +296,12 @@ module Api
         }
       end
 
-
       # 轉移能量
       def transfer_energy
         energy = @game_state.game_cards.find_by(
           id: params[:energy_id],
           attached_to_game_card_id: params[:from_pokemon_id]
         )
-
 
         unless energy
           return render json: { error: '找不到能量卡' }, status: :not_found
@@ -319,7 +315,6 @@ module Api
         to_pokemon_name = nil
         to_zone_display = nil
 
-
         if params[:to_pokemon_id]
           to_pokemon = @game_state.game_cards.find(params[:to_pokemon_id])
           to_pokemon_data = Card.find_by(card_unique_id: to_pokemon.card_unique_id)
@@ -332,7 +327,6 @@ module Api
             attached_to_game_card_id: nil
           )
         end
-
 
         # 🔥 廣播能量轉移（加入詳細資訊）
         broadcast_game_update('energy_transferred', {
@@ -348,13 +342,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 能量轉移 - #{energy_data&.name}: #{from_pokemon_data&.name} → #{to_pokemon_name || to_zone_display}"
 
         render json: {
           message: '能量轉移成功',
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       # 結束回合
       def end_turn
@@ -366,7 +360,6 @@ module Api
           round_number: @game_state.round_number + 1
         )
 
-
         # 🔥 廣播回合結束
         broadcast_game_update('turn_ended', {
           old_turn_user_id: old_turn_user,
@@ -376,13 +369,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 回合結束 - Round: #{@game_state.round_number}, Next: #{@game_state.current_turn_user_id}"
 
         render json: {
           message: '回合結束',
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       # 抽牌
       def draw_cards
@@ -392,9 +385,7 @@ module Api
           .order(:zone_position)
           .limit(count)
 
-
         deck_cards.update_all(zone: 'hand', zone_position: nil)
-
 
         # 🔥 廣播抽牌
         broadcast_game_update('cards_drawn', {
@@ -403,13 +394,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 抽牌 - Count: #{deck_cards.count}"
 
         render json: {
           message: "抽了 #{deck_cards.count} 張牌",
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       # 從棄牌堆撿牌
       def pick_from_discard
@@ -419,9 +410,7 @@ module Api
           .order(updated_at: :desc)
           .limit(count)
 
-
         discard_cards.update_all(zone: 'hand', zone_position: nil)
-
 
         # 🔥 廣播從棄牌堆撿牌
         broadcast_game_update('cards_picked_from_discard', {
@@ -430,6 +419,7 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 從棄牌堆撿牌 - Count: #{discard_cards.count}"
 
         render json: {
           message: "從棄牌堆撿了 #{discard_cards.count} 張牌",
@@ -438,13 +428,11 @@ module Api
         }
       end
 
-
       # 領取獎勵卡
       def take_prize
         prize_card = @game_state.game_cards
           .where(user_id: @current_user.id, zone: 'prize')
           .first
-
 
         unless prize_card
           return render json: { error: '沒有獎勵卡可領取' }, status: :bad_request
@@ -453,9 +441,7 @@ module Api
         # 🔥 獲取卡片資料
         card_data = Card.find_by(card_unique_id: prize_card.card_unique_id)
 
-
         prize_card.update!(zone: 'hand', zone_position: nil)
-
 
         # 🔥 廣播領取獎勵卡（加入卡片名稱）
         broadcast_game_update('prize_taken', {
@@ -465,6 +451,7 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 領取獎勵卡 - Card: #{card_data&.name}"
 
         render json: {
           message: '領取獎勵卡成功',
@@ -473,7 +460,6 @@ module Api
         }
       end
 
-
       # 移動競技場卡
       def move_stadium_card
         card = @game_state.game_cards.find_by(
@@ -481,14 +467,11 @@ module Api
           zone: 'stadium'
         )
 
-
         unless card
           return render json: { error: '找不到競技場卡' }, status: :not_found
         end
 
-
         target_user = User.find_by(id: params[:player_id])
-
 
         unless target_user
           return render json: { error: '找不到目標玩家' }, status: :not_found
@@ -497,13 +480,11 @@ module Api
         # 🔥 獲取卡片資料
         card_data = Card.find_by(card_unique_id: card.card_unique_id)
 
-
         card.update!(
           zone: params[:target_zone],
           user_id: target_user.id,
           zone_position: nil
         )
-
 
         # 🔥 廣播競技場卡移動（加入詳細資訊）
         broadcast_game_update('stadium_card_moved', {
@@ -517,13 +498,13 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 競技場卡移動 - #{card_data&.name} → #{target_user.name}"
 
         render json: {
           message: '競技場卡移動成功',
           game_state: game_state_json(@game_state.reload)
         }
       end
-
 
       def set_prize_cards
         count = params[:count].to_i
@@ -533,9 +514,7 @@ module Api
           .order(:created_at)
           .limit(count)
 
-
         deck_cards.update_all(zone: 'prize')
-
 
         # 🔥 廣播設定獎勵卡
         broadcast_game_update('prize_cards_set', {
@@ -544,6 +523,7 @@ module Api
           user_name: @current_user.name
         })
 
+        Rails.logger.info "✅ 設定獎勵卡 - Count: #{deck_cards.count}"
 
         render json: {
           message: "設定了 #{deck_cards.count} 張獎勵卡",
@@ -551,37 +531,7 @@ module Api
         }
       end
 
-
       private
-
-
-      def set_user
-        token = cookies.signed[:jwt] || 
-                request.headers['Authorization']&.split(' ')&.last
-
-
-        unless token
-          return render json: { error: 'No token provided' }, status: :unauthorized
-        end
-
-
-        decoded = JsonWebToken.decode(token)
-
-
-        unless decoded
-          return render json: { error: 'Invalid or expired token' }, status: :unauthorized
-        end
-
-
-        @current_user = User.find_by(id: decoded[:user_id])
-
-        unless @current_user
-          render json: { 
-            error: '找不到用戶' 
-          }, status: :unauthorized
-        end
-      end
-
 
       # 🔥 修正：改善查詢邏輯
       def set_game_state
@@ -596,13 +546,13 @@ module Api
         end
 
         unless @game_state
+          Rails.logger.error "❌ 找不到遊戲 - ID: #{params[:id]}"
           render json: { 
             error: '找不到遊戲',
             hint: '請確認房間號碼是否正確，或嘗試重新建立房間'
           }, status: :not_found
         end
       end
-
 
       # 廣播遊戲更新的方法
       def broadcast_game_update(action, data = {})
@@ -633,7 +583,7 @@ module Api
         game_states[current_user_id.to_s] = current_player_state
 
         # 只在對手確實存在時才產生對手視角
-        if opponent_id.present?  # ← 用 .present? 更安全
+        if opponent_id.present?
           begin
             @current_user = User.find(opponent_id)
             opponent_state = game_state_json(@game_state)
@@ -683,12 +633,10 @@ module Api
         }[zone] || zone
       end
 
-
       def game_state_json(game_state)
         current_player_id = @current_user.id
         opponent_id = game_state.player1_id == current_player_id ? 
                       game_state.player2_id : game_state.player1_id
-
 
         {
           id: game_state.id,
@@ -722,15 +670,12 @@ module Api
         }
       end
 
-
       def cards_json(cards)
         cards.map { |card| card_detail_json(card) }
       end
 
-
       def card_detail_json(card)
         return nil unless card
-
 
         card_data = Card.find_by(card_unique_id: card.card_unique_id)
 
@@ -749,7 +694,6 @@ module Api
           stacked_cards: cards_json(card.stacked_cards)
         }
       end
-
 
       def stadium_cards_json(cards)
         cards.map do |card|
