@@ -11,13 +11,13 @@ const apiClient = axios.create({
 // 🔥 Token 管理工具
 const TokenManager = {
   setTokens(accessToken, refreshToken) {
-    localStorage.setItem('access_token', accessToken)
+    localStorage.setItem('jwt', accessToken)
     localStorage.setItem('refresh_token', refreshToken)
     console.log('✅ Tokens saved to localStorage')
   },
   
   getAccessToken() {
-    return localStorage.getItem('access_token')
+    return localStorage.getItem('jwt')
   },
   
   getRefreshToken() {
@@ -195,3 +195,4 @@ class AuthService {
 }
 
 export default new AuthService()
+export { apiClient }

@@ -27,7 +27,7 @@ const tokenApi = axios.create({
 // 🔥 只對 tokenApi 加上 JWT 攔截器
 tokenApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('jwt')
+    const token = localStorage.getItem('access_token')  // 🔥 改成 'access_token'
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -197,7 +197,7 @@ export const gameAPI = {
   },
   
   setPrizeCards(roomId, count) {
-  return tokenApi.post(`/games/${roomId}/set_prize_cards`, { count })
+    return tokenApi.post(`/games/${roomId}/set_prize_cards`, { count })
   }
 }
 
