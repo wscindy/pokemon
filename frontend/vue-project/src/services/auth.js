@@ -11,13 +11,13 @@ const apiClient = axios.create({
 // 🔥 Token 管理工具
 const TokenManager = {
   setTokens(accessToken, refreshToken) {
-    localStorage.setItem('jwt', accessToken)
+    localStorage.setItem('accessToken', accessToken)
     localStorage.setItem('refresh_token', refreshToken)
     console.log('✅ Tokens saved to localStorage')
   },
   
   getAccessToken() {
-    return localStorage.getItem('jwt')
+    return localStorage.getItem('accessToken')
   },
   
   getRefreshToken() {
