@@ -106,7 +106,7 @@ Rails.application.configure do
   config.action_cable.mount_path = '/cable'
   
   # 是否在同一個 process 中運行 (solid_cable 建議設為 nil 或不設定)
-  # config.action_cable.disable_request_forgery_protection = false
+  config.action_cable.disable_request_forgery_protection = false
   
   # ==================== End ActionCable 設定 ====================
 end

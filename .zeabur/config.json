@@ -1,6 +1,6 @@
 {
   "name": "pokemon-tcg-backend",
-  "buildCommand": "bundle install && rails assets:precompile",
+  "buildCommand": "bundle install && rails assets:precompile db:migrate",
   "startCommand": "bundle exec puma -C config/puma.rb",
   "routes": [
     {
