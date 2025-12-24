@@ -26,9 +26,7 @@ class Api::V1::AuthController < ApplicationController
       user = User.find_or_create_by(email: google_user['email']) do |u|
         u.provider = 'google_oauth2'
         u.uid = google_user['sub']
-        # 不設定 name，讓用戶自己選（或存到另一個欄位）
-        # u.name = google_user['name']  # ← 註解掉這行
-        u.avatar_url = google_user['picture']  # 存 Google 頭像作為預設
+        u.avatar_url = google_user['picture']
         u.password = Devise.friendly_token[0, 20]
       end
 
@@ -94,8 +92,8 @@ class Api::V1::AuthController < ApplicationController
   def logout
     @current_user.update(refresh_token: nil, refresh_token_expires_at: nil)
     
-    cookies.delete(:jwt)
-    cookies.delete(:refresh_token)
+    cookies.delete(:jwt, domain: Rails.env.production? ? '.zeabur.app' : nil)
+    cookies.delete(:refresh_token, domain: Rails.env.production? ? '.zeabur.app' : nil)
 
     render json: { message: 'Logged out successfully' }, status: :ok
   end
@@ -105,7 +103,7 @@ class Api::V1::AuthController < ApplicationController
     render json: { user: user_json(@current_user) }, status: :ok
   end
 
-  # 🔥 新增：GET /api/v1/auth/ws_token
+  # GET /api/v1/auth/ws_token
   # 用於 WebSocket 連線時取得 token
   def ws_token
     # 從 cookie 或 header 取得現有的 JWT token
@@ -159,22 +157,28 @@ class Api::V1::AuthController < ApplicationController
     end
   end
 
+  # 🔥 修改：加上 domain 設定
   def set_auth_cookies(access_token, refresh_token)
-    cookies.signed[:jwt] = {
-      value: access_token,
+    # 統一的 cookie 設定選項
+    cookie_options = {
       httponly: true,
-      secure: Rails.env.production?,
-      same_site: Rails.env.production? ? :none : :lax,
-      expires: 24.hours.from_now
+      secure: true,  # 🔥 生產環境強制 HTTPS
+      same_site: :none,  # 🔥 允許跨域
+      domain: Rails.env.production? ? '.zeabur.app' : nil  # 🔥 設定主域名
     }
 
-    cookies.signed[:refresh_token] = {
+    cookies.signed[:jwt] = cookie_options.merge(
+      value: access_token,
+      expires: 24.hours.from_now
+    )
+
+    cookies.signed[:refresh_token] = cookie_options.merge(
       value: refresh_token,
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: Rails.env.production? ? :none : :lax,
       expires: 30.days.from_now
-    }
+    )
+    
+    # Debug log
+    Rails.logger.info "🍪 Set cookies - jwt: #{access_token[0..20]}..., domain: #{cookie_options[:domain]}, same_site: #{cookie_options[:same_site]}"
   end
 
   def user_json(user)
