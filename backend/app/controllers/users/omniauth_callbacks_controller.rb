@@ -6,12 +6,12 @@ class Users::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     if @user.persisted?
       # Generate tokens
-      access_token = JsonWebToken.encode(user_id: @user.id)
+      accessToken = JsonWebToken.encode(user_id: @user.id)
       @user.generate_refresh_token!
 
       # Set cookies
       cookies.signed[:jwt] = {
-        value: access_token,
+        value: accessToken,
         httponly: true,
         secure: Rails.env.production?,
         same_site: :lax,

@@ -40,15 +40,15 @@ class Api::V1::AuthController < ApplicationController
       end
 
       # Generate tokens
-      access_token = JsonWebToken.encode(user_id: user.id)
+      accessToken = JsonWebToken.encode(user_id: user.id)
       user.generate_refresh_token!
 
       # Set cookies
-      set_auth_cookies(access_token, user.refresh_token)
+      set_auth_cookies(accessToken, user.refresh_token)
 
       render json: {
         user: user_json(user),
-        access_token: access_token,
+        accessToken: accessToken,
         refresh_token: user.refresh_token
       }, status: :ok
     else
@@ -71,16 +71,16 @@ class Api::V1::AuthController < ApplicationController
 
     if user&.refresh_token_valid?
       # Generate new access token
-      access_token = JsonWebToken.encode(user_id: user.id)
+      accessToken = JsonWebToken.encode(user_id: user.id)
       
       # Optionally rotate refresh token
       user.generate_refresh_token!
 
-      set_auth_cookies(access_token, user.refresh_token)
+      set_auth_cookies(accessToken, user.refresh_token)
 
       render json: {
         user: user_json(user),
-        access_token: access_token,
+        accessToken: accessToken,
         refresh_token: user.refresh_token
       }, status: :ok
     else
@@ -158,7 +158,7 @@ class Api::V1::AuthController < ApplicationController
   # end
 
   # 🔥 修改：加上 domain 設定
-  def set_auth_cookies(access_token, refresh_token)
+  def set_auth_cookies(accessToken, refresh_token)
     # 統一的 cookie 設定選項
     cookie_options = {
       httponly: true,
@@ -168,7 +168,7 @@ class Api::V1::AuthController < ApplicationController
     }
 
     cookies.signed[:jwt] = cookie_options.merge(
-      value: access_token,
+      value: accessToken,
       expires: 24.hours.from_now
     )
 
@@ -178,7 +178,7 @@ class Api::V1::AuthController < ApplicationController
     )
     
     # Debug log
-    Rails.logger.info "🍪 Set cookies - jwt: #{access_token[0..20]}..., domain: #{cookie_options[:domain]}, same_site: #{cookie_options[:same_site]}"
+    Rails.logger.info "🍪 Set cookies - jwt: #{accessToken[0..20]}..., domain: #{cookie_options[:domain]}, same_site: #{cookie_options[:same_site]}"
   end
 
   def user_json(user)

@@ -25,7 +25,7 @@ const TokenManager = {
   },
   
   clearTokens() {
-    localStorage.removeItem('access_token')
+    localStorage.removeItem('accessToken')
     localStorage.removeItem('refresh_token')
     console.log('🗑️ Tokens cleared from localStorage')
   }
@@ -71,13 +71,13 @@ apiClient.interceptors.response.use(
           { withCredentials: true }
         )
         
-        const { access_token, refresh_token } = response.data
-        TokenManager.setTokens(access_token, refresh_token)
+        const { accessToken, refresh_token } = response.data
+        TokenManager.setTokens(accessToken, refresh_token)
         
         console.log('✅ Token refreshed successfully')
         
         // 用新 token 重試原請求
-        originalRequest.headers.Authorization = `Bearer ${access_token}`
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return apiClient(originalRequest)
         
       } catch (refreshError) {
@@ -101,8 +101,8 @@ class AuthService {
       })
       
       // 🔥 儲存 tokens
-      const { access_token, refresh_token } = response.data
-      TokenManager.setTokens(access_token, refresh_token)
+      const { accessToken, refresh_token } = response.data
+      TokenManager.setTokens(accessToken, refresh_token)
       
       console.log('✅ Login successful')
       
@@ -160,8 +160,8 @@ class AuthService {
         refresh_token: refreshToken
       })
       
-      const { access_token, refresh_token } = response.data
-      TokenManager.setTokens(access_token, refresh_token)
+      const { accessToken, refresh_token } = response.data
+      TokenManager.setTokens(accessToken, refresh_token)
       
       return response.data
     } catch (error) {

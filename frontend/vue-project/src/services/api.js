@@ -27,7 +27,7 @@ const tokenApi = axios.create({
 // 🔥 只對 tokenApi 加上 JWT 攔截器
 tokenApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token')  // 🔥 改成 'access_token'
+    const token = localStorage.getItem('accessToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
