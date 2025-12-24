@@ -1,8 +1,6 @@
-// frontend/vue-project/src/services/websocket.js
+// src/services/websocket.js
 import { createConsumer } from '@rails/actioncable'
-import axios from 'axios'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL
+import { apiClient } from './authService'
 
 class WebSocketService {
   constructor() {
@@ -18,20 +16,31 @@ class WebSocketService {
     }
 
     try {
-      // 🔥 重點：先取得 WebSocket token
-      const tokenResponse = await axios.get(`${API_BASE_URL}/api/v1/auth/ws_token`, {
-        withCredentials: true
-      })
+      console.log('🔌 準備連接 WebSocket...')
       
+      // 🔥 1. 先取得 WebSocket token
+      console.log('📡 請求 WS token...')
+      const tokenResponse = await apiClient.get('/auth/ws_token')
       const wsToken = tokenResponse.data.token
       
-      // 建立 WebSocket 連線，帶上 token
-      const wsUrl = import.meta.env.VITE_WS_URL
-      this.consumer = createConsumer(`${wsUrl}?token=${wsToken}`)
+      console.log('✅ 取得 WS token:', wsToken ? wsToken.substring(0, 20) + '...' : 'null')
+      
+      if (!wsToken) {
+        throw new Error('無法取得 WebSocket token')
+      }
+      
+      // 🔥 2. 建立 WebSocket URL
+      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://pokemonww.zeabur.app'
+      const fullUrl = `${wsUrl}/cable?token=${wsToken}`
+      
+      console.log('🔗 WebSocket URL:', fullUrl.replace(wsToken, wsToken.substring(0, 20) + '...'))
+      
+      // 🔥 3. 建立 consumer
+      this.consumer = createConsumer(fullUrl)
+      
+      console.log(`📺 訂閱頻道: GameChannel, room_id: ${roomId}`)
 
-      console.log(`🔌 連接 WebSocket: game_${roomId}`)
-
-      // 訂閱頻道
+      // 🔥 4. 訂閱頻道
       this.subscription = this.consumer.subscriptions.create(
         {
           channel: 'GameChannel',
@@ -52,37 +61,48 @@ class WebSocketService {
             console.log('📨 收到訊息:', data)
             
             // 根據訊息類型觸發不同的回調
-            if (data.type === 'game_update') {
-              this.trigger('gameUpdate', data)
-            } else if (data.type === 'player_joined') {
-              this.trigger('playerJoined', data)
-            } else if (data.type === 'player_left') {
-              this.trigger('playerLeft', data)
+            switch(data.type) {
+              case 'game_update':
+                this.trigger('gameUpdate', data)
+                break
+              case 'player_joined':
+                this.trigger('playerJoined', data)
+                break
+              case 'player_left':
+                this.trigger('playerLeft', data)
+                break
+              default:
+                console.log('未知的訊息類型:', data.type)
             }
           }
         }
       )
 
+      console.log('✅ WebSocket 設定完成')
       return this.subscription
+      
     } catch (error) {
       console.error('❌ WebSocket 連線失敗:', error)
+      console.error('錯誤詳情:', error.response?.data || error.message)
       throw error
     }
   }
 
   disconnect() {
     if (this.subscription) {
+      console.log('🔌 取消訂閱...')
       this.subscription.unsubscribe()
       this.subscription = null
     }
     
     if (this.consumer) {
+      console.log('🔌 斷開 consumer...')
       this.consumer.disconnect()
       this.consumer = null
     }
     
     this.callbacks = {}
-    console.log('🔌 WebSocket 已斷線')
+    console.log('✅ WebSocket 已完全斷線')
   }
 
   // 註冊事件回調
@@ -91,6 +111,7 @@ class WebSocketService {
       this.callbacks[event] = []
     }
     this.callbacks[event].push(callback)
+    console.log(`📝 註冊事件: ${event}`)
   }
 
   // 移除事件回調
@@ -102,17 +123,23 @@ class WebSocketService {
     } else {
       delete this.callbacks[event]
     }
+    console.log(`🗑️ 移除事件: ${event}`)
   }
 
   // 觸發事件
   trigger(event, data) {
-    if (!this.callbacks[event]) return
+    if (!this.callbacks[event]) {
+      console.log(`⚠️ 沒有監聽器: ${event}`)
+      return
+    }
+    
+    console.log(`🎯 觸發事件: ${event}, 監聽器數量: ${this.callbacks[event].length}`)
     
     this.callbacks[event].forEach(callback => {
       try {
         callback(data)
       } catch (error) {
-        console.error(`事件 ${event} 回調錯誤:`, error)
+        console.error(`❌ 事件 ${event} 回調錯誤:`, error)
       }
     })
   }
