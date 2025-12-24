@@ -1,5 +1,5 @@
 // src/services/gameApi.js
-import { apiClient } from './authService'  // 🔥 改成從 authService 導入
+import { apiClient } from './auth'
 
 export default {
   // 初始化遊戲

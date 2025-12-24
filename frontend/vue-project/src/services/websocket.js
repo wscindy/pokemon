@@ -1,6 +1,6 @@
 // src/services/websocket.js
 import { createConsumer } from '@rails/actioncable'
-import { apiClient } from './authService'
+import { apiClient } from './auth'
 
 class WebSocketService {
   constructor() {
