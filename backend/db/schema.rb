@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_12_18_132940) do
+ActiveRecord::Schema[8.0].define(version: 2025_12_24_081023) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -111,7 +111,9 @@ ActiveRecord::Schema[8.0].define(version: 2025_12_18_132940) do
     t.index ["card_unique_id"], name: "index_game_cards_on_card_unique_id"
     t.index ["game_state_id", "user_id", "zone"], name: "index_game_cards_on_state_user_zone"
     t.index ["game_state_id"], name: "index_game_cards_on_game_state_id"
+    t.index ["id"], name: "index_game_cards_on_id", unique: true
     t.index ["parent_card_id"], name: "index_game_cards_on_parent_card_id"
+    t.index ["user_id", "zone"], name: "index_game_cards_on_user_id_and_zone"
     t.index ["user_id"], name: "index_game_cards_on_user_id"
   end
 
