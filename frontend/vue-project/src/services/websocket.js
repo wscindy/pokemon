@@ -30,7 +30,7 @@ class WebSocketService {
       }
       
       // 🔥 2. 建立 WebSocket URL
-      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://pokemonww.zeabur.app'
+      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://pokemonww-api.zeabur.app'
       const fullUrl = `${wsUrl}/cable?token=${wsToken}`
       
       console.log('🔗 WebSocket URL:', fullUrl.replace(wsToken, wsToken.substring(0, 20) + '...'))
