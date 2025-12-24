@@ -138,22 +138,25 @@ const loadGameState = async () => {
     loading.value = true
     error.value = null
     
-    console.log('🎮 載入遊戲狀態，Room ID:', gameStateId.value)
+    console.log('🎮 載入遊戲狀態，Game State ID:', gameStateId.value)
     
     const response = await gameAPI.getGameState(gameStateId.value)
     
     console.log('✅ 遊戲狀態載入成功:', response.data)
+    console.log('🔍 response.data.room_id:', response.data.room_id)  // 👈 建議加這個
     
     gameState.value = {
       ...response.data,
       stadium_cards: response.data.stadium_cards || []
     }
     
-    // 從回應中取得 room_id
+    // 🔥 設定 roomId
     roomId.value = response.data.room_id
-    console.log('🎯 Room ID:', roomId.value)
     
-    console.log('📊 解析後的遊戲狀態:', gameState.value)
+    console.log('🎯 設定後的 roomId.value:', roomId.value)
+    console.log('🎯 roomId.value 型別:', typeof roomId.value)
+    
+    console.log('📊 解析後的 gameState.value:', gameState.value)
   } catch (err) {
     console.error('❌ 載入遊戲狀態失敗:', err)
     console.error('❌ 錯誤回應:', err.response?.data)
@@ -167,7 +170,7 @@ const loadGameState = async () => {
   }
 }
 
-    // WebSocket 事件處理
+
 // WebSocket 事件處理
 const handleGameUpdate = (data) => {
   console.log('🔄 收到遊戲更新:', data)
@@ -272,17 +275,24 @@ const handlePlayerJoined = () => {
 
 const connectWebSocket = async () => {
   try {
-    // 使用 roomId 而不是 gameStateId
+    console.log('🔍 connectWebSocket 開始')  // 👈 新增
+    console.log('🔍 此時 roomId.value =', roomId.value)  // 👈 關鍵！
+    console.log('🔍 型別:', typeof roomId.value)  // 👈 關鍵！
+    
     if (!roomId.value) {
       console.error('❌ Room ID 不存在，無法連接 WebSocket')
       return
     }
-    console.log('🔌 連接 WebSocket, Room ID:', roomId.value)
+    
+    console.log('🔌 連接 WebSocket, 傳入參數:', roomId.value)  // 👈 關鍵！
     await websocketService.connect(roomId.value)
+    
     websocketService.on('gameUpdate', handleGameUpdate)
     websocketService.on('playerJoined', handlePlayerJoined)
+    
+    console.log('✅ WebSocket 事件監聽器已註冊')
   } catch (err) {
-    console.error('WebSocket 連線失敗:', err)
+    console.error('❌ WebSocket 連線失敗:', err)
   }
 }
 
