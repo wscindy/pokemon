@@ -2,7 +2,7 @@
 module Api
   module V1
     class GamesController < ApplicationController
-      before_action :set_user
+      before_action :authenticate_user_from_token!
       before_action :set_game_state, only: [
         :setup_game, :game_state, :play_card, :attach_energy,
         :move_card, :stack_card, :update_damage, :transfer_energy, :end_turn,

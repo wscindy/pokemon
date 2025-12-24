@@ -1,8 +1,8 @@
 module Api
   module V1
     class UsersController < ApplicationController
+      before_action :authenticate_user_from_token!  # ← 🔥 所有方法都需要認證
       before_action :set_user, only: [:show, :update, :deck, :add_card, :remove_card]
-      before_action :authenticate_user_from_token!, only: [:update_profile]
       
       # GET /api/v1/users/:id
       def show
@@ -37,7 +37,7 @@ module Api
         end
       end
       
-      # PATCH/PUT /api/v1/users/profile (新增這個方法)
+      # PATCH/PUT /api/v1/users/profile
       def update_profile
         if @current_user.update(profile_params)
           render json: {
@@ -109,34 +109,10 @@ module Api
         params.require(:user).permit(:email, :name, :uid, :provider, :avatar_url, :online_status)
       end
       
-      # 新增這個方法（用於 update_profile）
       def profile_params
         params.require(:user).permit(:name, :avatar_url)
       end
       
-      # 新增這個方法（JWT 認證）
-      def authenticate_user_from_token!
-        token = cookies.signed[:jwt] || 
-                request.headers['Authorization']&.split(' ')&.last
-
-        unless token
-          return render json: { error: 'No token provided' }, status: :unauthorized
-        end
-
-        decoded = JsonWebToken.decode(token)
-
-        unless decoded
-          return render json: { error: 'Invalid or expired token' }, status: :unauthorized
-        end
-
-        @current_user = User.find_by(id: decoded[:user_id])
-
-        unless @current_user
-          render json: { error: 'User not found' }, status: :unauthorized
-        end
-      end
-      
-      # 新增這個方法（用於回傳 user JSON）
       def user_json(user)
         {
           id: user.id,
