@@ -63,7 +63,7 @@ const handleAuthCallback = async (event) => {
       console.log('Login successful:', result.user)
       
       // 連接 WebSocket
-      websocketService.connect(result.access_token)
+      // websocketService.connect(result.access_token)
       
       // 判斷是新用戶還是舊用戶
       const isNewUser = !result.user.name || result.user.name === result.user.email
