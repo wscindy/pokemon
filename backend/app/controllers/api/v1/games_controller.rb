@@ -619,40 +619,53 @@ module Api
         end
 
         Rails.logger.info "📡 廣播遊戲更新: #{action} to game_#{room_id}"
-        Rails.logger.info "👤 當前玩家: #{current_user_id}, 對手: #{opponent_id}"
+        Rails.logger.info "👤 當前玩家: #{current_user_id}, 對手: #{opponent_id.inspect}"
 
-        # 🔥 分別產生兩個視角的遊戲狀態
+        # 備份原本的 @current_user
         original_user = @current_user
 
         # 產生當前玩家的視角
         @current_user = User.find(current_user_id)
         current_player_state = game_state_json(@game_state)
 
-        # 建立 game_states Hash，只在 opponent_id 存在時才加入對手視角
-        game_states = { current_user_id.to_s => current_player_state }
-        
-        # 產生對手的視角（只在對手存在時）
-        if opponent_id
-          @current_user = User.find(opponent_id)
-          opponent_state = game_state_json(@game_state)
-          game_states[opponent_id.to_s] = opponent_state
+        # 建立 game_states，使用字串作為 key
+        game_states = {}
+        game_states[current_user_id.to_s] = current_player_state
+
+        # 只在對手確實存在時才產生對手視角
+        if opponent_id.present?  # ← 用 .present? 更安全
+          begin
+            @current_user = User.find(opponent_id)
+            opponent_state = game_state_json(@game_state)
+            game_states[opponent_id.to_s] = opponent_state
+          rescue ActiveRecord::RecordNotFound => e
+            Rails.logger.warn "⚠️ 找不到對手 ID: #{opponent_id}"
+          end
         end
 
         # 還原 @current_user
         @current_user = original_user
 
-        # 廣播包含兩個視角的資料
-        ActionCable.server.broadcast(
-          "game_#{room_id}",
-          {
-            type: 'game_update',
-            action: action,
-            user_id: current_user_id,
-            user_name: original_user.name,
-            data: data,
-            game_states: game_states
-          }
-        )
+        # 準備廣播的資料
+        broadcast_data = {
+          type: 'game_update',
+          action: action,
+          user_id: current_user_id,
+          user_name: original_user.name,
+          data: data,
+          game_states: game_states
+        }
+
+        Rails.logger.info "📡 準備廣播資料，game_states keys: #{game_states.keys.inspect}"
+
+        # 廣播
+        ActionCable.server.broadcast("game_#{room_id}", broadcast_data)
+        
+        Rails.logger.info "✅ 廣播成功"
+      rescue => e
+        Rails.logger.error "❌ 廣播失敗: #{e.class} - #{e.message}"
+        Rails.logger.error e.backtrace.first(10).join("\n")
+        raise
       end
 
       # 🔥 新增：zone 中文對照 helper
