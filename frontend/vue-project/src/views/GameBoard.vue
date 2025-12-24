@@ -132,6 +132,7 @@ const getStackedCardsExceptLatest = (pokemon) => {
 }
 
 // 載入遊戲狀態
+const roomId = ref(null) 
 const loadGameState = async () => {
   try {
     loading.value = true
@@ -147,6 +148,10 @@ const loadGameState = async () => {
       ...response.data,
       stadium_cards: response.data.stadium_cards || []
     }
+    
+    // 從回應中取得 room_id
+    roomId.value = response.data.room_id
+    console.log('🎯 Room ID:', roomId.value)
     
     console.log('📊 解析後的遊戲狀態:', gameState.value)
   } catch (err) {
@@ -267,7 +272,13 @@ const handlePlayerJoined = () => {
 
 const connectWebSocket = async () => {
   try {
-    await websocketService.connect(gameStateId.value)
+    // 使用 roomId 而不是 gameStateId
+    if (!roomId.value) {
+      console.error('❌ Room ID 不存在，無法連接 WebSocket')
+      return
+    }
+    console.log('🔌 連接 WebSocket, Room ID:', roomId.value)
+    await websocketService.connect(roomId.value)
     websocketService.on('gameUpdate', handleGameUpdate)
     websocketService.on('playerJoined', handlePlayerJoined)
   } catch (err) {
