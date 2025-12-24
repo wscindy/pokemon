@@ -17,6 +17,7 @@ class WebSocketService {
 
     try {
       console.log('🔌 準備連接 WebSocket...')
+      console.log('📍 傳入的 roomId:', roomId, '型別:', typeof roomId)
       
       // 🔥 1. 先取得 WebSocket token
       console.log('📡 請求 WS token...')
@@ -39,6 +40,7 @@ class WebSocketService {
       this.consumer = createConsumer(fullUrl)
       
       console.log(`📺 訂閱頻道: GameChannel, room_id: ${roomId}`)
+      console.log('📺 room_id 型別:', typeof roomId)
 
       // 🔥 4. 訂閱頻道
       this.subscription = this.consumer.subscriptions.create(
@@ -49,6 +51,7 @@ class WebSocketService {
         {
           connected: () => {
             console.log('✅ WebSocket 連線成功')
+            console.log('📍 已訂閱 room_id:', roomId) 
             this.trigger('connected')
           },
 
