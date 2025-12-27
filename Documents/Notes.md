@@ -221,3 +221,7 @@ api/v1/api/games#game_state
         Rails.logger.info "====================================="
         # ✅ 使用 @game_state 來查找卡片（更安全）
         stadium_card = @game_state.game_cards.find_by(id: params[:card_id])
+
+
+
+找出所有含before_action的方法 grep -r "before_action" app/controllers/api/v1/
