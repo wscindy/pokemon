@@ -239,27 +239,28 @@ module Api
         card_data = Card.find_by(card_unique_id: card.card_unique_id)
         target_data = Card.find_by(card_unique_id: target.card_unique_id)
 
-        card.update!(
-          zone: 'stacked',
-          parent_card_id: target.id
-        )
+        # ✅ 使用 model 的 stack_card 方法（不會設定 zone: 'stacked'）
+        if target.stack_card(card)
+          # 🔥 廣播卡牌疊加（加入卡片名稱）
+          broadcast_game_update('card_stacked', {
+            card_id: card.id,
+            card_name: card_data&.name || '卡片',
+            target_card_id: target.id,
+            target_card_name: target_data&.name || '寶可夢',
+            user_id: @current_user.id,
+            user_name: @current_user.name
+          })
 
-        # 🔥 廣播卡牌疊加（加入卡片名稱）
-        broadcast_game_update('card_stacked', {
-          card_id: card.id,
-          card_name: card_data&.name || '卡片',
-          target_card_id: target.id,
-          target_card_name: target_data&.name || '寶可夢',
-          user_id: @current_user.id,
-          user_name: @current_user.name
-        })
+          Rails.logger.info "✅ 卡牌疊加 - #{card_data&.name} → #{target_data&.name}"
 
-        Rails.logger.info "✅ 卡牌疊加 - #{card_data&.name} → #{target_data&.name}"
-
-        render json: {
-          message: '疊加成功',
-          game_state: game_state_json(@game_state.reload)
-        }
+          render json: {
+            message: '疊加成功',
+            game_state: game_state_json(@game_state.reload)
+          }
+        else
+          Rails.logger.error "❌ 卡牌疊加失敗"
+          render json: { error: '疊加失敗' }, status: :unprocessable_entity
+        end
       end
 
       # 更新傷害
