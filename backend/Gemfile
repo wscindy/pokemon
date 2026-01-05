@@ -47,9 +47,6 @@ end
 
 gem "pg", "~> 1.1"
 
-# rack-cors gem
-gem 'rack-cors'
-
 # Authentication
 gem 'devise'
 gem 'omniauth-google-oauth2'
@@ -59,7 +56,6 @@ gem 'omniauth-rails_csrf_protection'
 gem 'jwt'
 
 # CORS
-gem 'rack-cors'
 
 gem 'dotenv-rails', groups: [:development, :test]
 
@@ -68,4 +64,5 @@ gem 'httparty'
 # test
 group :development, :test do
   gem 'rspec-rails'
+  gem 'factory_bot_rails'
 end
