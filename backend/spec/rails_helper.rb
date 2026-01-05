@@ -21,6 +21,9 @@ RSpec.configure do |config|
 
   config.use_transactional_fixtures = true
 
+  # Factory bot(test)
+  config.include FactoryBot::Syntax::Methods
+
   # 保護卡片資料不被測試清空
   config.before(:suite) do
     puts "🧹 清空測試資料(保留卡片資料)..."
