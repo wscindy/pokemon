@@ -225,3 +225,8 @@ api/v1/api/games#game_state
 
 
 找出所有含before_action的方法 grep -r "before_action" app/controllers/api/v1/
+
+
+# rails 測試
+
+rspec spec/models/user_spec.rb
