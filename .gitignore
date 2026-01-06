@@ -5,7 +5,6 @@ vendor/
 Gemfile.lock
 
 # Data
-backend/public/data_tc/
 frontend/vue-project/public/data_tc/
 frontend/.DS_Store
 
