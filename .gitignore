@@ -53,7 +53,6 @@ frontend/vue-project/.env.local
 
 # pokemon image file
 frontend/vue-project/public/data_tc/
-frontend/vue-project/public/data_tc/*
 
 # import pokemon cards script file
 *import_cards*
