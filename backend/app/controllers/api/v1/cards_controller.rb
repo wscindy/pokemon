@@ -75,8 +75,7 @@ module Api
               card_types: { only: [:type_name] },
               card_tags: { only: [:tag_name] }
             }
-          ),
-          total: @cards.count
+          )
         }
       end
     end

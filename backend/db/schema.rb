@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_12_24_081023) do
+ActiveRecord::Schema[8.0].define(version: 2026_01_08_122651) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -49,6 +49,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_12_24_081023) do
     t.string "card_unique_id", null: false
     t.string "type_name", null: false
     t.index ["card_unique_id"], name: "idx_card_types_card_id"
+    t.index ["type_name", "card_unique_id"], name: "index_card_types_on_type_name_and_card_unique_id"
   end
 
   create_table "cards", id: :serial, force: :cascade do |t|
@@ -75,7 +76,6 @@ ActiveRecord::Schema[8.0].define(version: 2025_12_24_081023) do
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "updated_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.index ["card_type"], name: "idx_cards_type"
-    t.index ["name"], name: "idx_cards_name"
     t.unique_constraint ["card_unique_id"], name: "cards_card_unique_id_key"
   end
 
@@ -170,6 +170,17 @@ ActiveRecord::Schema[8.0].define(version: 2025_12_24_081023) do
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.index ["creator_id"], name: "index_rooms_on_creator_id"
     t.index ["status"], name: "index_rooms_on_status"
+  end
+
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", null: false
+    t.binary "payload", null: false
+    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "channel_hash", null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
+    t.index ["id"], name: "index_solid_cable_messages_on_id", unique: true
   end
 
   create_table "user_cards", id: :serial, force: :cascade do |t|
