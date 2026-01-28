@@ -25,6 +25,24 @@ A full-stack web application that digitalizes Pokemon Trading Card Game, impleme
 ### Development & Testing
 - **RSpec**: Testing framework
 - **Factory Bot**: Test data generation
+- **GitHub Actions**: Automated testing on every push
+
+## Testing
+
+This project uses RSpec for automated testing. Tests run automatically via GitHub Actions on every push.
+
+**Run tests locally:**
+
+
+[RSpec Tests Folder](https://github.com/wscindy/pokemon/tree/fdad7f328a5fc6038becce8c7a3218b054ff510b/backend/spec)
+```bash
+cd backend
+bundle exec rspec                    # Run all tests
+bundle exec rspec spec/models/       # Test specific folder
+bundle exec rspec spec/models/user_spec.rb  # Test specific file
+```
+
+**CI/CD:** Tests automatically run on push via [GitHub Actions](.github/workflows/test.yml)
 
 ## Installation & Setup
 
