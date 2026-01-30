@@ -230,3 +230,10 @@ api/v1/api/games#game_state
 # rails 測試
 
 rspec spec/models/user_spec.rb
+
+
+# test 環境執行 seed data
+RAILS_ENV=test rails db:seed
+
+# test 環境執行 seed data
+RAILS_ENV=development rails db:seed
