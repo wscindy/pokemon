@@ -23,6 +23,8 @@ RSpec.configure do |config|
 
   # Factory bot(test)
   config.include FactoryBot::Syntax::Methods
+# ActionCable
+  config.include ActionCable::TestHelper
 
   # 保護卡片資料不被測試清空
   config.before(:suite) do
