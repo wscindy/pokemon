@@ -19,11 +19,11 @@ RSpec.configure do |config|
     Rails.root.join('spec/fixtures')
   ]
 
-  config.use_transactional_fixtures = true
+  config.use_transactional_fixtures = true # Automatically rollback database changes after each test
 
   # Factory bot(test)
   config.include FactoryBot::Syntax::Methods
-# ActionCable
+  # ActionCable
   config.include ActionCable::TestHelper
 
   # 保護卡片資料不被測試清空
