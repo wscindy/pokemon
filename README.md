@@ -58,7 +58,8 @@ npx playwright test --headed         # Run with browser visible
 npx playwright show-report           # View test report
 ```
 
-**CI/CD:** Tests automatically run on push via [GitHub Actions](.github/workflows/playwright.yml)
+**CI/CD:** Playwright test cases automatically run on push via [GitHub Actions](.github/workflows/playwright.yml)
+**An example of passed Playwright test cases on GitHub Actions**: [View Test Report](https://github.com/wscindy/pokemon/actions/runs/21621774799)
 
 ## Installation & Setup
 
