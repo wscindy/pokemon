@@ -29,9 +29,12 @@ A full-stack web application that digitalizes Pokemon Trading Card Game, impleme
 
 ## Testing
 
-This project uses RSpec for automated testing. Tests run automatically via GitHub Actions on every push.
+This project uses **RSpec** for backend testing and **Playwright** for frontend E2E testing. All tests run automatically via GitHub Actions on every push.
 
-**Run tests locally:**
+### Backend Testing (RSpec)
+
+
+Run tests locally:
 
 
 [RSpec Tests Folder](https://github.com/wscindy/pokemon/tree/fdad7f328a5fc6038becce8c7a3218b054ff510b/backend/spec)
@@ -43,6 +46,19 @@ bundle exec rspec spec/models/user_spec.rb  # Test specific file
 ```
 
 **CI/CD:** Tests automatically run on push via [GitHub Actions](.github/workflows/test.yml)
+
+### Frontend E2E Testing (Playwright)
+Run tests locally:
+
+```bash
+cd frontend/vue-project
+npx playwright test                  # Run all tests
+npx playwright test --ui             # Run with UI mode
+npx playwright test --headed         # Run with browser visible
+npx playwright show-report           # View test report
+```
+
+**CI/CD:** Tests automatically run on push via [GitHub Actions](.github/workflows/playwright.yml)
 
 ## Installation & Setup
 
