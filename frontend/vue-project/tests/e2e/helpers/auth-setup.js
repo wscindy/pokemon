@@ -1,4 +1,3 @@
-// tests/helpers/auth-setup.js
 export async function setupAuthenticatedUser(page) {
   await page.goto('http://localhost:5173/');
   
